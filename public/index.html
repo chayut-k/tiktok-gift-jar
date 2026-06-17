@@ -216,7 +216,7 @@
     <div id="userInfo" class="status connected"></div>
 
     <div class="dashboard-warning">
-      ⚠️ <strong>สำคัญ:</strong> ต้องเปิดแท็บ Dashboard ค้างไว้ระหว่าง Live — ปิดแท็บนี้จะตัดการเชื่อมต่อ TikTok อัตโนมัติ
+      ⚠️ <strong>สำคัญ:</strong> ต้องเปิดแท็บ Dashboard ค้างไว้ระหว่าง Live — เน็ตหลุดชั่วคราวระบบจะพยายามเชื่อมใหม่ (รอ ~45 วินาที) — ปิดแท็บนานเกิน 45 วินาทีจะตัดการเชื่อมต่อ
     </div>
 
     <!-- Connection Status -->
@@ -348,19 +348,33 @@
 
     // ================== Socket Events ==================
     socket.on('status', (data) => {
-      isConnected = data.connected;
+      const keepUsername = data.reason === 'reconnecting'
+        || data.reason === 'disconnected'
+        || data.reason === 'error';
+
+      isConnected = !!data.connected;
       if (data.connected && data.username) {
         connectedUsername = data.username;
-      } else if (!data.connected) {
+      } else if (!keepUsername) {
         connectedUsername = '';
+      } else if (data.username) {
+        connectedUsername = data.username;
       }
-      updateConnectionStatus(data.connected, data.username);
+
+      const isReconnecting = data.reason === 'reconnecting';
+      updateConnectionStatus(data.connected, data.username || connectedUsername, isReconnecting);
       updateOverlayUI();
 
       if (data.reason === 'dashboard_closed') {
         showMessage('⚠️ การเชื่อมต่อ TikTok ถูกตัดเพราะปิด Dashboard', true);
       } else if (data.reason === 'stream_end') {
         showMessage('📴 Live จบแล้ว', false);
+      } else if (data.reason === 'reconnecting') {
+        showMessage(`🔄 กำลังเชื่อมต่อ TikTok ใหม่... (ครั้งที่ ${data.attempt || 1})`, false);
+      } else if (data.reason === 'reconnected') {
+        showMessage('✅ เชื่อมต่อ TikTok กลับมาแล้ว', false);
+      } else if (data.reason === 'disconnected' || data.reason === 'error') {
+        showMessage('⚠️ TikTok หลุดชั่วคราว — กำลังพยายามเชื่อมใหม่...', false);
       }
     });
 

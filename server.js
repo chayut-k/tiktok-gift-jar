@@ -177,6 +177,8 @@ io.use(wrapMiddleware(sessionMiddleware));
 // ================== Per-User Stream State ==================
 const userStreams = new Map();
 const usernameOwners = new Map();
+const DASHBOARD_GRACE_MS = 45000;
+const TIKTOK_RECONNECT_DELAYS = [3000, 5000, 10000, 15000, 30000, 60000];
 
 function createStreamState(email) {
   return {
@@ -189,7 +191,31 @@ function createStreamState(email) {
     likers: new Map(),
     gifters: new Map(),
     dashboardSockets: new Set(),
+    dashboardDisconnectTimer: null,
+    reconnectTimer: null,
+    reconnectAttempt: 0,
   };
+}
+
+function shouldKeepStreamAlive(stream) {
+  return stream.dashboardSockets.size > 0 || !!stream.dashboardDisconnectTimer;
+}
+
+function clearDashboardGraceTimer(stream) {
+  if (!stream?.dashboardDisconnectTimer) return;
+  clearTimeout(stream.dashboardDisconnectTimer);
+  stream.dashboardDisconnectTimer = null;
+}
+
+function clearReconnectTimer(stream) {
+  if (!stream?.reconnectTimer) return;
+  clearTimeout(stream.reconnectTimer);
+  stream.reconnectTimer = null;
+}
+
+function clearStreamTimers(stream) {
+  clearDashboardGraceTimer(stream);
+  clearReconnectTimer(stream);
 }
 
 function getOrCreateStream(email) {
@@ -294,11 +320,62 @@ function disconnectUserStream(email, reason = 'manual') {
   const stream = userStreams.get(email);
   if (!stream) return;
 
+  clearStreamTimers(stream);
+  stream.reconnectAttempt = 0;
   stopTikTokConnection(stream);
 
   clearUsernameOwner(stream.tiktokUsername, email);
   emitStreamStatus(email, false, reason ? { reason } : {});
   console.log(`🔌 ตัดการเชื่อมต่อของ ${email} (${reason})`);
+}
+
+function scheduleDashboardGraceDisconnect(email) {
+  const stream = userStreams.get(email);
+  if (!stream) return;
+
+  clearDashboardGraceTimer(stream);
+  console.log(`⏳ Dashboard grace period: ${email} (${DASHBOARD_GRACE_MS / 1000}s)`);
+
+  stream.dashboardDisconnectTimer = setTimeout(() => {
+    stream.dashboardDisconnectTimer = null;
+    const current = userStreams.get(email);
+    if (current && current.dashboardSockets.size === 0) {
+      disconnectUserStream(email, 'dashboard_closed');
+    }
+  }, DASHBOARD_GRACE_MS);
+}
+
+function scheduleTikTokReconnect(email) {
+  const stream = userStreams.get(email);
+  if (!stream?.tiktokUsername || !shouldKeepStreamAlive(stream)) return;
+
+  clearReconnectTimer(stream);
+
+  const delay = TIKTOK_RECONNECT_DELAYS[
+    Math.min(stream.reconnectAttempt, TIKTOK_RECONNECT_DELAYS.length - 1)
+  ];
+  stream.reconnectAttempt += 1;
+
+  console.log(`🔄 [${email}] TikTok reconnect in ${delay}ms (attempt ${stream.reconnectAttempt})`);
+  emitStreamStatus(email, false, {
+    reason: 'reconnecting',
+    attempt: stream.reconnectAttempt,
+  });
+
+  stream.reconnectTimer = setTimeout(async () => {
+    stream.reconnectTimer = null;
+    const current = userStreams.get(email);
+    if (!current?.tiktokUsername || !shouldKeepStreamAlive(current)) return;
+
+    try {
+      await reconnectTikTokConnectionForUser(email);
+    } catch (err) {
+      console.error(`Reconnect failed [${email}]:`, err.message || err);
+      if (shouldKeepStreamAlive(current)) {
+        scheduleTikTokReconnect(email);
+      }
+    }
+  }, delay);
 }
 
 function syncOverlaySocket(socket, username) {
@@ -333,6 +410,7 @@ function syncOverlaySocket(socket, username) {
 
 function registerDashboardSocket(socket, email) {
   const stream = getOrCreateStream(email);
+  clearDashboardGraceTimer(stream);
   stream.dashboardSockets.add(socket.id);
   socket.data.email = email;
   socket.data.isDashboard = true;
@@ -355,8 +433,8 @@ function unregisterDashboardSocket(email, socketId) {
   stream.dashboardSockets.delete(socketId);
   console.log(`🖥️ Dashboard offline: ${email} (${stream.dashboardSockets.size} tab left)`);
 
-  if (stream.dashboardSockets.size === 0 && stream.connection) {
-    disconnectUserStream(email, 'dashboard_closed');
+  if (stream.dashboardSockets.size === 0 && (stream.connection || stream.reconnectTimer)) {
+    scheduleDashboardGraceDisconnect(email);
   }
 }
 
@@ -461,21 +539,73 @@ function attachTikTokListeners(conn, email, connectionId) {
 
   conn.on('disconnected', () => {
     if (!isActive()) return;
+    const stream = userStreams.get(email);
+    if (!stream) return;
     console.log(`🔌 [${email}] TikTok disconnected`);
-    emitStreamStatus(email, false);
+    stream.connection = null;
+    emitStreamStatus(email, false, { reason: 'disconnected' });
+    scheduleTikTokReconnect(email);
   });
 
   conn.on('streamEnd', () => {
     if (!isActive()) return;
+    clearReconnectTimer(userStreams.get(email));
     console.log(`📺 [${email}] Stream ended`);
     emitStreamStatus(email, false, { reason: 'stream_end' });
   });
 
   conn.on('error', (err) => {
     if (!isActive()) return;
+    const stream = userStreams.get(email);
+    if (!stream) return;
     console.error(`TikTok error [${email}]:`, err.message || err);
-    emitStreamStatus(email, false, { error: 'Connection error' });
+    stopTikTokConnection(stream);
+    emitStreamStatus(email, false, { reason: 'error', error: 'Connection error' });
+    scheduleTikTokReconnect(email);
   });
+}
+
+async function reconnectTikTokConnectionForUser(email) {
+  const stream = userStreams.get(email);
+  if (!stream?.tiktokUsername) throw new Error('TikTok Username หายไป');
+
+  if (stream.connecting) {
+    await stream.connecting;
+  }
+
+  const tiktokUsername = stream.tiktokUsername;
+  const sessionId = users[email]?.sessionId || null;
+
+  const connectTask = (async () => {
+    stopTikTokConnection(stream);
+
+    const connectionId = stream.activeConnectionId;
+    const options = {
+      enableExtendedGiftInfo: true,
+      processInitialData: false,
+    };
+    if (sessionId) options.sessionId = sessionId;
+
+    const conn = new TikTokLiveConnection(tiktokUsername, options);
+    stream.connection = conn;
+    attachTikTokListeners(conn, email, connectionId);
+
+    await conn.connect();
+    if (stream.connection !== conn || stream.activeConnectionId !== connectionId) return;
+
+    stream.reconnectAttempt = 0;
+    console.log(`✅ [${email}] TikTok reconnected: ${tiktokUsername}`);
+    emitStreamStatus(email, true, { reason: 'reconnected' });
+  })();
+
+  stream.connecting = connectTask;
+  try {
+    await connectTask;
+  } finally {
+    if (stream.connecting === connectTask) {
+      stream.connecting = null;
+    }
+  }
 }
 
 async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = null) {
@@ -521,6 +651,7 @@ async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = n
     try {
       await conn.connect();
       if (stream.connection !== conn || stream.activeConnectionId !== connectionId) return;
+      stream.reconnectAttempt = 0;
       console.log(`✅ [${email}] เชื่อมต่อ TikTok สำเร็จ: ${tiktokUsername}`);
       emitStreamStatus(email, true);
     } catch (err) {
