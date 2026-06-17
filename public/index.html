@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>TikTok Live Connector</title>
+  <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
@@ -69,6 +70,8 @@
     .btn-danger:hover { background: #aa0000; }
     .btn-secondary { background: #444; color: white; }
     .btn-secondary:hover { background: #555; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn:disabled:hover { filter: none; }
 
     .status {
       padding: 10px 14px;
@@ -167,10 +170,6 @@
       <label>TikTok Username</label>
       <input type="text" id="tiktokUsername" placeholder="เช่น art_of_yut">
       
-      <label>Session ID (แนะนำถ้าเจอปัญหา)</label>
-      <input type="text" id="sessionId" placeholder="Session ID (ไม่บังคับ)">
-      <div class="help">ได้จาก cookie tiktok.com (ใช้เมื่อถูกบล็อกบ่อย)</div>
-
       <div style="margin-top: 10px;">
         <button class="btn btn-primary" id="connectBtn" type="button">เชื่อมต่อ</button>
         <button class="btn btn-secondary" id="saveOnlyBtn" type="button">บันทึกเฉยๆ</button>
@@ -178,23 +177,14 @@
       </div>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="card">
-      <h2>Quick Actions</h2>
-      <button class="btn btn-secondary" id="resetJarBtn" type="button">🔄 Reset โถของขวัญ (Total)</button>
-      <div style="margin-top:8px; font-size:13px;">
-        Total Diamonds: <span id="totalDiamonds" class="stat">0</span>
-      </div>
-    </div>
-
     <!-- Overlays -->
     <div class="card">
-      <h2>📺 Overlay URLs (สำหรับ OBS)</h2>
-      <button class="btn btn-primary" id="generateOverlaysBtn" type="button" style="margin-bottom:8px;">แสดง Overlay Links</button>
+      <h2>📺 Overlay URLs</h2>
+      <button class="btn btn-primary" id="generateOverlaysBtn" type="button" style="margin-bottom:8px;" disabled>แสดง Overlay Links</button>
       <div id="overlay-box" style="display:none;">
         <div id="urls"></div>
       </div>
-      <div class="help" style="margin-top:8px;">คัดลอกลิงก์ไปใส่ใน Browser Source ของ OBS (Background: Transparent)</div>
+      <div class="help" id="overlayHint" style="margin-top:8px;">เชื่อมต่อ TikTok ก่อนเพื่อแสดง Overlay Links</div>
     </div>
 
     <button class="btn btn-secondary" id="logoutBtn" type="button" style="margin-top:10px;">ออกจากระบบ</button>
@@ -205,20 +195,18 @@
     const socket = io();
     let currentUser = null;
     let isConnected = false;
-    let currentTotal = 0;
+    let connectedUsername = '';
 
     // ================== Socket Events ==================
     socket.on('status', (data) => {
       isConnected = data.connected;
-      updateConnectionStatus(data.connected, data.username);
-    });
-
-    socket.on('gift', (data) => {
-      if (data.total !== undefined) {
-        currentTotal = data.total;
-        const el = document.getElementById('totalDiamonds');
-        if (el) el.textContent = currentTotal.toLocaleString('th-TH');
+      if (data.connected && data.username) {
+        connectedUsername = data.username;
+      } else if (!data.connected) {
+        connectedUsername = '';
       }
+      updateConnectionStatus(data.connected, data.username);
+      updateOverlayUI();
     });
 
     // ================== Google Login (Popup) ==================
@@ -311,38 +299,30 @@
       if (user.tiktokUsername) {
         document.getElementById('tiktokUsername').value = user.tiktokUsername;
       }
-      if (user.sessionId) {
-        document.getElementById('sessionId').value = user.sessionId;
-      }
 
-      // Load current server status (total + connection)
       fetch('/api/status')
         .then(r => r.json())
         .then(status => {
-          if (status.totalDiamonds) {
-            currentTotal = status.totalDiamonds;
-            const el = document.getElementById('totalDiamonds');
-            if (el) el.textContent = currentTotal.toLocaleString('th-TH');
-          }
           if (status.connected && status.username) {
             isConnected = true;
+            connectedUsername = status.username;
             updateConnectionStatus(true, status.username);
           }
+          updateOverlayUI();
         })
-        .catch(() => {});
+        .catch(() => updateOverlayUI());
     }
 
     // ================== TikTok Connection ==================
     async function connectTikTok() {
       const tiktokUsername = document.getElementById('tiktokUsername').value.trim();
-      const sessionId = document.getElementById('sessionId').value.trim();
 
       if (!tiktokUsername) {
         return showMessage('กรุณากรอก TikTok Username', true);
       }
 
       showMessage('กำลังเชื่อมต่อ...', false);
-      updateConnectionStatus(false, tiktokUsername, true); // connecting
+      updateConnectionStatus(false, tiktokUsername, true);
 
       try {
         const res = await fetch('/save-tiktok', {
@@ -351,7 +331,6 @@
           body: JSON.stringify({
             email: currentUser.email,
             tiktokUsername,
-            sessionId: sessionId || null
           })
         });
         const data = await res.json();
@@ -359,20 +338,23 @@
         if (data.success) {
           showMessage('✅ เชื่อมต่อสำเร็จ!', false);
           isConnected = true;
+          connectedUsername = tiktokUsername;
           updateConnectionStatus(true, tiktokUsername);
+          updateOverlayUI();
         } else {
           showMessage('❌ ' + (data.error || 'เชื่อมต่อล้มเหลว'), true);
           updateConnectionStatus(false, tiktokUsername);
+          updateOverlayUI();
         }
       } catch (err) {
         showMessage('❌ ไม่สามารถติดต่อเซิร์ฟเวอร์ได้', true);
         updateConnectionStatus(false);
+        updateOverlayUI();
       }
     }
 
     function saveOnly() {
       const tiktokUsername = document.getElementById('tiktokUsername').value.trim();
-      const sessionId = document.getElementById('sessionId').value.trim();
 
       if (!tiktokUsername) return showMessage('กรุณากรอก TikTok Username', true);
 
@@ -382,7 +364,6 @@
         body: JSON.stringify({
           email: currentUser.email,
           tiktokUsername,
-          sessionId: sessionId || null
         })
       })
       .then(r => r.json())
@@ -399,10 +380,15 @@
       try {
         await fetch('/disconnect-tiktok', { method: 'POST' });
         isConnected = false;
+        connectedUsername = '';
         updateConnectionStatus(false);
+        updateOverlayUI();
         showMessage('ตัดการเชื่อมต่อแล้ว', false);
       } catch (e) {
+        isConnected = false;
+        connectedUsername = '';
         updateConnectionStatus(false);
+        updateOverlayUI();
       }
     }
 
@@ -424,22 +410,34 @@
       }
     }
 
-    // ================== Actions ==================
-    async function resetJar() {
-      try {
-        const res = await fetch('/reset-jar', { method: 'POST' });
-        const data = await res.json();
-        currentTotal = 0;
-        document.getElementById('totalDiamonds').textContent = '0';
-        showMessage('รีเซ็ตโถเรียบร้อย', false);
-      } catch (e) {
-        showMessage('รีเซ็ตไม่สำเร็จ', true);
+    // ================== Overlays ==================
+    function updateOverlayUI() {
+      const btn = document.getElementById('generateOverlaysBtn');
+      const overlayBox = document.getElementById('overlay-box');
+      const hint = document.getElementById('overlayHint');
+      const ready = isConnected && connectedUsername;
+
+      btn.disabled = !ready;
+      if (!ready) {
+        overlayBox.style.display = 'none';
+        document.getElementById('urls').replaceChildren();
+        hint.textContent = 'เชื่อมต่อ TikTok ก่อนเพื่อแสดง Overlay Links';
+      } else {
+        hint.textContent = 'คัดลอกลิงก์ไปใส่ใน Browser Source ของ OBS (Background: Transparent)';
       }
     }
 
-    // ================== Overlays ==================
+    function buildOverlayUrl(path, username) {
+      const url = new URL(path, window.location.origin);
+      url.searchParams.set('user', username);
+      return url.toString();
+    }
+
     function generateOverlays() {
-      const base = window.location.origin;
+      if (!isConnected || !connectedUsername) {
+        return showMessage('กรุณาเชื่อมต่อ TikTok ก่อน', true);
+      }
+
       const container = document.getElementById('overlay-box');
       const urlsDiv = document.getElementById('urls');
       container.style.display = 'block';
@@ -453,7 +451,7 @@
 
       urlsDiv.innerHTML = '';
       overlays.forEach(o => {
-        const full = base + o.path;
+        const full = buildOverlayUrl(o.path, connectedUsername);
         const item = document.createElement('div');
         item.className = 'overlay-item';
         item.innerHTML = `
@@ -512,7 +510,6 @@
       document.getElementById('connectBtn').addEventListener('click', connectTikTok);
       document.getElementById('saveOnlyBtn').addEventListener('click', saveOnly);
       document.getElementById('disconnectBtn').addEventListener('click', disconnectTikTok);
-      document.getElementById('resetJarBtn').addEventListener('click', resetJar);
       document.getElementById('generateOverlaysBtn').addEventListener('click', generateOverlays);
       document.getElementById('logoutBtn').addEventListener('click', logout);
     }

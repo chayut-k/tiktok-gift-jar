@@ -2,6 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
   <title>Gift Jar - Fixed Stacking</title>
   <style>
     body { background: transparent; font-family: Arial, sans-serif; margin: 0; overflow: hidden; }
@@ -93,7 +94,7 @@
     let total = 0;
     const maxGoal = 50000;
     let giftCount = 0;
-    const MAX_GIFTS = 42;   // จำนวนสูงสุดก่อนเริ่มกองใหม่
+    const MAX_GIFTS = 40;   // จำนวนสูงสุดก่อนเริ่มกองใหม่
 
     const giftsContainer = document.getElementById('gifts');
     const lastGiftLabel = document.getElementById('last-gift');
@@ -105,7 +106,7 @@
       gift.onerror = () => { gift.src = 'images/coin.png'; };
       
       let baseSize = 40;
-      let scale = diamonds >= 1000 ? 2.55 : 
+      let scale = diamonds >= 1000 ? 2.45 : 
                  diamonds >= 500 ? 2.2 : 
                  diamonds >= 100 ? 1.85 : Math.min(2.1, 0.85 + (diamonds / 55));
       
