@@ -185,6 +185,7 @@ function createStreamState(email) {
     tiktokUsername: '',
     totalDiamonds: 0,
     likers: new Map(),
+    gifters: new Map(),
     dashboardSockets: new Set(),
   };
 }
@@ -251,9 +252,23 @@ function computeTopLikers(stream, limit = 5) {
     }));
 }
 
+function computeTopGifters(stream, limit = 5) {
+  return [...stream.gifters.entries()]
+    .sort((a, b) => b[1].diamonds - a[1].diamonds)
+    .slice(0, limit)
+    .map(([username, data], index) => ({
+      rank: index + 1,
+      username,
+      nickname: data.nickname,
+      diamonds: data.diamonds,
+      avatar: data.avatar,
+    }));
+}
+
 function resetStreamCounters(stream) {
   stream.totalDiamonds = 0;
   stream.likers.clear();
+  stream.gifters.clear();
 }
 
 function clearUsernameOwner(username, email) {
@@ -301,6 +316,9 @@ function syncOverlaySocket(socket, username) {
 
   const top = computeTopLikers(stream);
   if (top.length > 0) socket.emit('topLikers', top);
+
+  const topGifters = computeTopGifters(stream);
+  if (topGifters.length > 0) socket.emit('topGifters', topGifters);
 }
 
 function registerDashboardSocket(socket, email) {
@@ -356,7 +374,20 @@ function attachTikTokListeners(conn, email) {
       if (!repeatEnd) return;
 
       const repeatCount = data.repeatCount || 1;
-      stream.totalDiamonds += diamonds * repeatCount;
+      const giftValue = diamonds * repeatCount;
+      stream.totalDiamonds += giftValue;
+
+      const uid = data.user?.uniqueId || data.uniqueId;
+      if (uid) {
+        const existing = stream.gifters.get(uid) || {
+          nickname: data.user?.nickname || uid,
+          diamonds: 0,
+          avatar: getAvatar(data.user),
+        };
+        existing.diamonds += giftValue;
+        stream.gifters.set(uid, existing);
+        emitToStream(stream.tiktokUsername, 'topGifters', computeTopGifters(stream));
+      }
 
       const giftPictureUrl = data.giftPictureUrl
         || (data.extendedGiftInfo && data.extendedGiftInfo.image && data.extendedGiftInfo.image.url_list && data.extendedGiftInfo.image.url_list[0])
@@ -718,6 +749,8 @@ app.post('/reset-jar', actionLimiter, (req, res) => {
   emitToStream(stream.tiktokUsername, 'gift', {
     total: 0, user: '', giftName: '', giftPictureUrl: '', diamonds: 0, repeatCount: 0,
   });
+  emitToStream(stream.tiktokUsername, 'topGifters', []);
+  emitToStream(stream.tiktokUsername, 'topLikers', []);
   res.json({ success: true, total: 0 });
 });
 

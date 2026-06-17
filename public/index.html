@@ -260,6 +260,7 @@
     let selectedGiftJar = 1;
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
+    let selectedTopGiftersBg = 'transparent';
 
     const JAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((id) => ({
       id,
@@ -282,8 +283,10 @@
     function loadSavedBgPreferences() {
       const chatBg = localStorage.getItem('tgj_chat_bg');
       const topBg = localStorage.getItem('tgj_toplikers_bg');
+      const giftersBg = localStorage.getItem('tgj_topgifters_bg');
       if (chatBg === 'transparent' || chatBg === 'dim') selectedChatBg = chatBg;
       if (topBg === 'transparent' || topBg === 'dim') selectedTopLikersBg = topBg;
+      if (giftersBg === 'transparent' || giftersBg === 'dim') selectedTopGiftersBg = giftersBg;
     }
 
     function getBgCss(bgId) {
@@ -299,6 +302,17 @@
             <div style="text-align:left;line-height:1.35;">
               <span style="color:#ffd700;font-weight:bold;font-size:13px;">Username</span>
               <span style="color:#fff;font-size:13px;"> สวัสดีครับ!</span>
+            </div>
+          </div>`;
+      }
+      if (type === 'gifter') {
+        return `
+          <div style="display:flex;align-items:center;gap:10px;background:${bg};border-radius:10px;padding:9px 12px;width:100%;max-width:300px;">
+            <span style="font-size:20px;">🥇</span>
+            <div style="width:34px;height:34px;border-radius:50%;background:#555;flex-shrink:0;border:2px solid #ffd700;"></div>
+            <div style="text-align:left;">
+              <div style="font-weight:600;font-size:14px;color:#fff;">Nickname</div>
+              <div style="color:#ffd700;font-size:13px;">💎 5,678</div>
             </div>
           </div>`;
       }
@@ -779,7 +793,19 @@
         getBg: () => selectedTopLikersBg,
         setBg: (bg) => { selectedTopLikersBg = bg; },
         storageKey: 'tgj_toplikers_bg',
-        previewType: 'top',
+        previewType: 'likers',
+      });
+    }
+
+    function createTopGiftersOverlayItem() {
+      return createOverlayItemWithBgPicker({
+        name: '🎁 Top Gifters',
+        path: '/top-gifters.html',
+        prefix: 'topGifters',
+        getBg: () => selectedTopGiftersBg,
+        setBg: (bg) => { selectedTopGiftersBg = bg; },
+        storageKey: 'tgj_topgifters_bg',
+        previewType: 'gifter',
       });
     }
 
@@ -819,6 +845,7 @@
       urlsDiv.appendChild(createGiftJarOverlayItem());
       urlsDiv.appendChild(createChatOverlayItem());
       urlsDiv.appendChild(createTopLikersOverlayItem());
+      urlsDiv.appendChild(createTopGiftersOverlayItem());
       simpleOverlays.forEach((o) => urlsDiv.appendChild(createOverlayItem(o)));
     }
 
