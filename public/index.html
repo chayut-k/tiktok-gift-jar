@@ -135,7 +135,7 @@
     <h1>🎥 TikTok Live Overlay</h1>
     <p style="color:#888">คล้าย Tikfinity - Gift Jar + Alerts</p>
     
-    <button class="google-btn" onclick="googleLogin()">
+    <button class="google-btn" id="googleLoginBtn" type="button">
       <img src="images/icons8-google-48.png" width="22" height="22">
       เข้าสู่ระบบด้วย Google
     </button>
@@ -165,16 +165,16 @@
       <div class="help">ได้จาก cookie tiktok.com (ใช้เมื่อถูกบล็อกบ่อย)</div>
 
       <div style="margin-top: 10px;">
-        <button class="btn btn-primary" onclick="connectTikTok()">เชื่อมต่อ</button>
-        <button class="btn btn-secondary" onclick="saveOnly()">บันทึกเฉยๆ</button>
-        <button class="btn btn-danger" onclick="disconnectTikTok()">ตัดการเชื่อมต่อ</button>
+        <button class="btn btn-primary" id="connectBtn" type="button">เชื่อมต่อ</button>
+        <button class="btn btn-secondary" id="saveOnlyBtn" type="button">บันทึกเฉยๆ</button>
+        <button class="btn btn-danger" id="disconnectBtn" type="button">ตัดการเชื่อมต่อ</button>
       </div>
     </div>
 
     <!-- Quick Actions -->
     <div class="card">
       <h2>Quick Actions</h2>
-      <button class="btn btn-secondary" onclick="resetJar()">🔄 Reset โถของขวัญ (Total)</button>
+      <button class="btn btn-secondary" id="resetJarBtn" type="button">🔄 Reset โถของขวัญ (Total)</button>
       <div style="margin-top:8px; font-size:13px;">
         Total Diamonds: <span id="totalDiamonds" class="stat">0</span>
       </div>
@@ -183,14 +183,14 @@
     <!-- Overlays -->
     <div class="card">
       <h2>📺 Overlay URLs (สำหรับ OBS)</h2>
-      <button class="btn btn-primary" onclick="generateOverlays()" style="margin-bottom:8px;">แสดง Overlay Links</button>
+      <button class="btn btn-primary" id="generateOverlaysBtn" type="button" style="margin-bottom:8px;">แสดง Overlay Links</button>
       <div id="overlay-box" style="display:none;">
         <div id="urls"></div>
       </div>
       <div class="help" style="margin-top:8px;">คัดลอกลิงก์ไปใส่ใน Browser Source ของ OBS (Background: Transparent)</div>
     </div>
 
-    <button class="btn btn-secondary" onclick="logout()" style="margin-top:10px;">ออกจากระบบ</button>
+    <button class="btn btn-secondary" id="logoutBtn" type="button" style="margin-top:10px;">ออกจากระบบ</button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
@@ -422,30 +422,32 @@
         { name: '❤️ Like Hearts', path: '/like-hearts.html' },
       ];
 
-      let html = '';
+      urlsDiv.innerHTML = '';
       overlays.forEach(o => {
         const full = base + o.path;
-        html += `
-          <div class="overlay-item">
-            <div>
-              <strong>${o.name}</strong><br>
-              <span>${full}</span>
-            </div>
-            <div>
-              <button class="small-btn" onclick="copyToClipboard('${full}')">Copy</button>
-              <button class="small-btn" onclick="window.open('${full}', '_blank')">Open</button>
-            </div>
+        const item = document.createElement('div');
+        item.className = 'overlay-item';
+        item.innerHTML = `
+          <div>
+            <strong>${o.name}</strong><br>
+            <span>${full}</span>
+          </div>
+          <div>
+            <button class="small-btn" type="button" data-action="copy">Copy</button>
+            <button class="small-btn" type="button" data-action="open">Open</button>
           </div>
         `;
+        item.querySelector('[data-action="copy"]').addEventListener('click', (e) => copyToClipboard(full, e.currentTarget));
+        item.querySelector('[data-action="open"]').addEventListener('click', () => window.open(full, '_blank'));
+        urlsDiv.appendChild(item);
       });
-      urlsDiv.innerHTML = html;
     }
 
-    function copyToClipboard(text) {
+    function copyToClipboard(text, btn) {
       navigator.clipboard.writeText(text).then(() => {
-        const orig = event.target.innerText;
-        event.target.innerText = 'Copied!';
-        setTimeout(() => { if (event.target) event.target.innerText = orig; }, 1200);
+        const orig = btn.innerText;
+        btn.innerText = 'Copied!';
+        setTimeout(() => { btn.innerText = orig; }, 1200);
       }).catch(() => {
         // fallback
         const input = document.createElement('input');
@@ -476,14 +478,25 @@
       window.location.reload();
     }
 
-    window.onload = async () => {
+    function bindEvents() {
+      document.getElementById('googleLoginBtn').addEventListener('click', googleLogin);
+      document.getElementById('connectBtn').addEventListener('click', connectTikTok);
+      document.getElementById('saveOnlyBtn').addEventListener('click', saveOnly);
+      document.getElementById('disconnectBtn').addEventListener('click', disconnectTikTok);
+      document.getElementById('resetJarBtn').addEventListener('click', resetJar);
+      document.getElementById('generateOverlaysBtn').addEventListener('click', generateOverlays);
+      document.getElementById('logoutBtn').addEventListener('click', logout);
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      bindEvents();
       await loadAppConfig();
       if (!initGoogleLogin()) {
         const waitForGoogle = setInterval(() => {
           if (initGoogleLogin()) clearInterval(waitForGoogle);
         }, 200);
       }
-    };
+    });
   </script>
 </body>
 </html>
