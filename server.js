@@ -20,11 +20,18 @@ const isProd = process.env.NODE_ENV === 'production';
 const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+function normalizeUrl(url) {
+  const cleaned = String(url || '').trim().replace(/\/$/, '');
+  if (!cleaned) return '';
+  if (/^https?:\/\//i.test(cleaned)) return cleaned;
+  return `https://${cleaned}`;
+}
+
 function resolveAppUrl() {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '');
-  if (process.env.RAILWAY_STATIC_URL) return process.env.RAILWAY_STATIC_URL.replace(/\/$/, '');
+  if (process.env.APP_URL) return normalizeUrl(process.env.APP_URL);
+  if (process.env.RAILWAY_STATIC_URL) return normalizeUrl(process.env.RAILWAY_STATIC_URL);
   if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-    return `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+    return normalizeUrl(process.env.RAILWAY_PUBLIC_DOMAIN);
   }
   return `http://localhost:${PORT}`;
 }
