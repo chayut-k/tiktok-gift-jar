@@ -91,7 +91,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com', 'https://apis.google.com'],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
-      connectSrc: ["'self'", 'https://accounts.google.com', 'wss:', 'ws:'],
+      connectSrc: ["'self'", 'https://accounts.google.com', 'https://oauth2.googleapis.com', 'https://www.googleapis.com', 'wss:', 'ws:'],
       frameSrc: ["'self'", 'https://accounts.google.com'],
       fontSrc: ["'self'", 'https:', 'data:'],
       objectSrc: ["'none'"],
@@ -100,6 +100,7 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 

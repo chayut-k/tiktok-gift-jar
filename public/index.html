@@ -128,6 +128,13 @@
     }
     label { font-size: 13px; color: #888; display: block; margin-top: 6px; }
     .help { font-size: 12px; color: #666; margin-top: -4px; margin-bottom: 8px; }
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
   </style>
 </head>
 <body>
@@ -247,36 +254,58 @@
       googleCodeClient.requestCode({ prompt: 'select_account' });
     }
 
-    function handleGoogleAuthResponse(response) {
-      if (response.error) return;
+    async function handleGoogleAuthResponse(response) {
+      if (response.error) {
+        alert('Login ยกเลิกหรือล้มเหลว');
+        return;
+      }
+      if (!response.code) {
+        alert('ไม่ได้รับ authorization code จาก Google');
+        return;
+      }
 
-      fetch('/google-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: response.code })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
+      try {
+        const res = await fetch('/google-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: response.code }),
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
           currentUser = data;
           showDashboard(data);
         } else {
-          alert('Login ไม่สำเร็จ: ' + (data.error || ''));
+          alert('Login ไม่สำเร็จ: ' + (data.error || res.status));
         }
-      })
-      .catch(() => alert('ไม่สามารถติดต่อเซิร์ฟเวอร์ได้'));
+      } catch (err) {
+        console.error('Google login error:', err);
+        alert('ไม่สามารถติดต่อเซิร์ฟเวอร์ได้');
+      }
     }
 
     function showDashboard(user) {
       document.getElementById('loginPage').style.display = 'none';
       document.getElementById('dashboardPage').style.display = 'block';
 
-      let html = `ยินดีต้อนรับ <strong>${user.name}</strong>`;
+      const userInfo = document.getElementById('userInfo');
+      userInfo.replaceChildren();
+
       if (user.picture) {
-        html = `<img src="${user.picture}" style="width:28px;height:28px;border-radius:50%;vertical-align:middle;margin-right:8px;">` + html;
+        const img = document.createElement('img');
+        img.src = user.picture;
+        img.alt = user.name || 'User';
+        img.className = 'user-avatar';
+        userInfo.appendChild(img);
       }
-      html += `<br><small>${user.email}</small>`;
-      document.getElementById('userInfo').innerHTML = html;
+
+      const welcome = document.createElement('span');
+      welcome.innerHTML = `ยินดีต้อนรับ <strong>${user.name}</strong>`;
+      userInfo.appendChild(welcome);
+      userInfo.appendChild(document.createElement('br'));
+
+      const emailEl = document.createElement('small');
+      emailEl.textContent = user.email;
+      userInfo.appendChild(emailEl);
 
       // Prefill saved data
       if (user.tiktokUsername) {
