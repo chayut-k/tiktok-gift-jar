@@ -63,7 +63,13 @@
       color: #ffd700;
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
+    }
+    .coin-icon {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      flex-shrink: 0;
     }
   </style>
 </head>
@@ -103,7 +109,8 @@
           <div class="info">
             <div class="nickname">${gifter.nickname || gifter.username}</div>
             <div class="diamonds">
-              💎 ${gifter.diamonds.toLocaleString()}
+              <img src="images/coin.png" class="coin-icon" alt="">
+              ${gifter.diamonds.toLocaleString()}
             </div>
           </div>
         `;

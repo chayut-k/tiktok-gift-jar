@@ -182,6 +182,8 @@ function createStreamState(email) {
   return {
     email,
     connection: null,
+    activeConnectionId: 0,
+    connecting: null,
     tiktokUsername: '',
     totalDiamonds: 0,
     likers: new Map(),
@@ -277,14 +279,22 @@ function clearUsernameOwner(username, email) {
   }
 }
 
+function stopTikTokConnection(stream) {
+  if (!stream?.connection) return;
+  stream.activeConnectionId += 1;
+  const conn = stream.connection;
+  stream.connection = null;
+  try {
+    conn.removeAllListeners();
+    conn.disconnect();
+  } catch (e) {}
+}
+
 function disconnectUserStream(email, reason = 'manual') {
   const stream = userStreams.get(email);
   if (!stream) return;
 
-  if (stream.connection) {
-    try { stream.connection.disconnect(); } catch (e) {}
-    stream.connection = null;
-  }
+  stopTikTokConnection(stream);
 
   clearUsernameOwner(stream.tiktokUsername, email);
   emitStreamStatus(email, false, reason ? { reason } : {});
@@ -329,7 +339,6 @@ function registerDashboardSocket(socket, email) {
   socket.join(getDashboardRoom(email));
 
   if (stream.tiktokUsername) {
-    socket.join(getStreamRoom(stream.tiktokUsername));
     socket.emit('status', {
       connected: !!stream.connection,
       username: stream.tiktokUsername,
@@ -359,11 +368,16 @@ function registerOverlaySocket(socket, username) {
   syncOverlaySocket(socket, username);
 }
 
-function attachTikTokListeners(conn, email) {
-  const stream = getOrCreateStream(email);
+function attachTikTokListeners(conn, email, connectionId) {
+  const isActive = () => {
+    const stream = userStreams.get(email);
+    return stream?.connection === conn && stream.activeConnectionId === connectionId;
+  };
 
   conn.on(WebcastEvent.GIFT, (data) => {
+    if (!isActive()) return;
     try {
+      const stream = getOrCreateStream(email);
       const diamonds = data.diamondCount
         || (data.extendedGiftInfo && data.extendedGiftInfo.diamond_count)
         || (data.giftDetails && data.giftDetails.diamondCount)
@@ -408,6 +422,8 @@ function attachTikTokListeners(conn, email) {
   });
 
   conn.on(WebcastEvent.CHAT, (data) => {
+    if (!isActive()) return;
+    const stream = getOrCreateStream(email);
     emitToStream(stream.tiktokUsername, 'chat', {
       nickname: data.user?.nickname || data.uniqueId || 'user',
       comment: data.comment || '',
@@ -416,7 +432,9 @@ function attachTikTokListeners(conn, email) {
   });
 
   conn.on(WebcastEvent.LIKE, (data) => {
+    if (!isActive()) return;
     try {
+      const stream = getOrCreateStream(email);
       const uid = data.user?.uniqueId || data.uniqueId;
       if (uid) {
         const existing = stream.likers.get(uid) || {
@@ -436,21 +454,25 @@ function attachTikTokListeners(conn, email) {
   });
 
   conn.on('connected', (state) => {
+    if (!isActive()) return;
     console.log(`🔗 [${email}] Connected to room:`, state?.roomId);
     emitStreamStatus(email, true);
   });
 
   conn.on('disconnected', () => {
+    if (!isActive()) return;
     console.log(`🔌 [${email}] TikTok disconnected`);
     emitStreamStatus(email, false);
   });
 
   conn.on('streamEnd', () => {
+    if (!isActive()) return;
     console.log(`📺 [${email}] Stream ended`);
     emitStreamStatus(email, false, { reason: 'stream_end' });
   });
 
   conn.on('error', (err) => {
+    if (!isActive()) return;
     console.error(`TikTok error [${email}]:`, err.message || err);
     emitStreamStatus(email, false, { error: 'Connection error' });
   });
@@ -461,37 +483,63 @@ async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = n
 
   const stream = getOrCreateStream(email);
 
-  if (stream.connection) {
-    try { stream.connection.disconnect(); } catch (e) {}
-    stream.connection = null;
+  if (stream.connecting) {
+    await stream.connecting;
   }
 
-  if (stream.tiktokUsername && stream.tiktokUsername !== tiktokUsername) {
-    clearUsernameOwner(stream.tiktokUsername, email);
-  }
+  const connectTask = (async () => {
+    const previousOwner = usernameOwners.get(tiktokUsername);
+    if (previousOwner && previousOwner !== email) {
+      const ownerStream = userStreams.get(previousOwner);
+      if (ownerStream) {
+        stopTikTokConnection(ownerStream);
+        clearUsernameOwner(tiktokUsername, previousOwner);
+      }
+    }
 
-  resetStreamCounters(stream);
-  stream.tiktokUsername = tiktokUsername;
-  usernameOwners.set(tiktokUsername, email);
+    stopTikTokConnection(stream);
 
-  const options = {
-    enableExtendedGiftInfo: true,
-    processInitialData: false,
-  };
-  if (sessionId) options.sessionId = sessionId;
+    if (stream.tiktokUsername && stream.tiktokUsername !== tiktokUsername) {
+      clearUsernameOwner(stream.tiktokUsername, email);
+    }
 
-  stream.connection = new TikTokLiveConnection(tiktokUsername, options);
-  attachTikTokListeners(stream.connection, email);
+    resetStreamCounters(stream);
+    stream.tiktokUsername = tiktokUsername;
+    usernameOwners.set(tiktokUsername, email);
 
+    const connectionId = stream.activeConnectionId;
+    const options = {
+      enableExtendedGiftInfo: true,
+      processInitialData: false,
+    };
+    if (sessionId) options.sessionId = sessionId;
+
+    const conn = new TikTokLiveConnection(tiktokUsername, options);
+    stream.connection = conn;
+    attachTikTokListeners(conn, email, connectionId);
+
+    try {
+      await conn.connect();
+      if (stream.connection !== conn || stream.activeConnectionId !== connectionId) return;
+      console.log(`✅ [${email}] เชื่อมต่อ TikTok สำเร็จ: ${tiktokUsername}`);
+      emitStreamStatus(email, true);
+    } catch (err) {
+      if (stream.connection === conn) {
+        stream.connection = null;
+      }
+      clearUsernameOwner(tiktokUsername, email);
+      stream.tiktokUsername = '';
+      throw err;
+    }
+  })();
+
+  stream.connecting = connectTask;
   try {
-    await stream.connection.connect();
-    console.log(`✅ [${email}] เชื่อมต่อ TikTok สำเร็จ: ${tiktokUsername}`);
-    emitStreamStatus(email, true);
-  } catch (err) {
-    stream.connection = null;
-    clearUsernameOwner(tiktokUsername, email);
-    stream.tiktokUsername = '';
-    throw err;
+    await connectTask;
+  } finally {
+    if (stream.connecting === connectTask) {
+      stream.connecting = null;
+    }
   }
 }
 
@@ -799,10 +847,10 @@ io.on('connection', (socket) => {
   const sessionEmail = sanitizeEmail(socket.request.session?.user?.email);
   const overlayUser = sanitizeTikTokUsername(socket.handshake.query?.user);
 
-  if (sessionEmail) {
-    registerDashboardSocket(socket, sessionEmail);
-  } else if (overlayUser) {
+  if (overlayUser) {
     registerOverlaySocket(socket, overlayUser);
+  } else if (sessionEmail) {
+    registerDashboardSocket(socket, sessionEmail);
   } else {
     console.log(`⚠️ Socket ${socket.id} rejected (no session / no user param)`);
     socket.disconnect(true);
@@ -827,10 +875,8 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 
 function shutdown(signal) {
   console.log(`\n${signal} received — shutting down...`);
-  userStreams.forEach((stream, email) => {
-    if (stream.connection) {
-      try { stream.connection.disconnect(); } catch (e) {}
-    }
+  userStreams.forEach((stream) => {
+    stopTikTokConnection(stream);
   });
   httpServer.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 10000);
