@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>TikTok Live Connector</title>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f0f0f;
+      color: #eee;
+      text-align: center;
+      padding: 20px 10px;
+      margin: 0;
+    }
+    .container { max-width: 560px; margin: 0 auto; }
+    h1 { margin-bottom: 8px; color: #ff0050; font-size: 28px; }
+    h2 { color: #ff0050; font-size: 18px; margin-top: 0; }
+
+    .google-btn {
+      background: #fff;
+      color: #000;
+      padding: 12px 28px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      margin: 16px 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .google-btn:hover { background: #f0f0f0; }
+
+    .card {
+      background: #1a1a1a;
+      padding: 18px 20px;
+      border-radius: 12px;
+      margin: 16px auto;
+      text-align: left;
+      border: 1px solid #333;
+    }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      margin: 6px 0;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #111;
+      color: white;
+      font-size: 15px;
+      box-sizing: border-box;
+    }
+    input:focus { outline: none; border-color: #ff0050; }
+
+    .btn {
+      padding: 10px 18px;
+      font-size: 15px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      margin: 4px 4px 4px 0;
+      transition: 0.2s;
+    }
+    .btn-primary { background: #00cc00; color: white; }
+    .btn-primary:hover { background: #00aa00; }
+    .btn-danger { background: #cc0000; color: white; }
+    .btn-danger:hover { background: #aa0000; }
+    .btn-secondary { background: #444; color: white; }
+    .btn-secondary:hover { background: #555; }
+
+    .status {
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin: 12px 0;
+      font-size: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .connected { background: #003300; color: #00ff88; border: 1px solid #00cc00; }
+    .disconnected { background: #330000; color: #ff6666; border: 1px solid #cc0000; }
+    .connecting { background: #332200; color: #ffcc66; border: 1px solid #cc9900; }
+
+    .overlay-item {
+      background: #222;
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin: 6px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+    .overlay-item span { color: #aaa; font-family: monospace; word-break: break-all; }
+    .small-btn {
+      padding: 4px 10px;
+      font-size: 12px;
+      background: #555;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-left: 4px;
+    }
+    .small-btn:hover { background: #ff0050; }
+
+    .message {
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin: 8px 0;
+      font-size: 14px;
+    }
+    .success { background: #003300; color: #00dd88; }
+    .error { background: #330000; color: #ff6666; }
+
+    .stat {
+      font-size: 22px;
+      font-weight: bold;
+      color: #ffd700;
+    }
+    label { font-size: 13px; color: #888; display: block; margin-top: 6px; }
+    .help { font-size: 12px; color: #666; margin-top: -4px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container" id="loginPage">
+    <h1>🎥 TikTok Live Overlay</h1>
+    <p style="color:#888">คล้าย Tikfinity - Gift Jar + Alerts</p>
+    
+    <button class="google-btn" onclick="googleLogin()">
+      <img src="images/icons8-google-48.png" width="22" height="22">
+      เข้าสู่ระบบด้วย Google
+    </button>
+    <p style="font-size:12px;color:#555">ข้อมูลของคุณจะถูกเก็บเฉพาะในเครื่องนี้</p>
+  </div>
+
+  <div class="container" id="dashboardPage" style="display: none;">
+    <h1>🎥 Dashboard</h1>
+    
+    <!-- User -->
+    <div id="userInfo" class="status connected"></div>
+
+    <!-- Connection Status -->
+    <div id="connectStatus" class="status disconnected">
+      <span class="status-dot" style="background:#ff6666"></span>
+      <span id="statusText">ยังไม่ได้เชื่อมต่อ TikTok</span>
+    </div>
+
+    <!-- TikTok Connect -->
+    <div class="card">
+      <h2>เชื่อมต่อ TikTok LIVE</h2>
+      <label>TikTok Username</label>
+      <input type="text" id="tiktokUsername" placeholder="เช่น art_of_yut">
+      
+      <label>Session ID (แนะนำถ้าเจอปัญหา)</label>
+      <input type="text" id="sessionId" placeholder="Session ID (ไม่บังคับ)">
+      <div class="help">ได้จาก cookie tiktok.com (ใช้เมื่อถูกบล็อกบ่อย)</div>
+
+      <div style="margin-top: 10px;">
+        <button class="btn btn-primary" onclick="connectTikTok()">เชื่อมต่อ</button>
+        <button class="btn btn-secondary" onclick="saveOnly()">บันทึกเฉยๆ</button>
+        <button class="btn btn-danger" onclick="disconnectTikTok()">ตัดการเชื่อมต่อ</button>
+      </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card">
+      <h2>Quick Actions</h2>
+      <button class="btn btn-secondary" onclick="resetJar()">🔄 Reset โถของขวัญ (Total)</button>
+      <div style="margin-top:8px; font-size:13px;">
+        Total Diamonds: <span id="totalDiamonds" class="stat">0</span>
+      </div>
+    </div>
+
+    <!-- Overlays -->
+    <div class="card">
+      <h2>📺 Overlay URLs (สำหรับ OBS)</h2>
+      <button class="btn btn-primary" onclick="generateOverlays()" style="margin-bottom:8px;">แสดง Overlay Links</button>
+      <div id="overlay-box" style="display:none;">
+        <div id="urls"></div>
+      </div>
+      <div class="help" style="margin-top:8px;">คัดลอกลิงก์ไปใส่ใน Browser Source ของ OBS (Background: Transparent)</div>
+    </div>
+
+    <button class="btn btn-secondary" onclick="logout()" style="margin-top:10px;">ออกจากระบบ</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let currentUser = null;
+    let isConnected = false;
+    let currentTotal = 0;
+
+    // ================== Socket Events ==================
+    socket.on('status', (data) => {
+      isConnected = data.connected;
+      updateConnectionStatus(data.connected, data.username);
+    });
+
+    socket.on('gift', (data) => {
+      if (data.total !== undefined) {
+        currentTotal = data.total;
+        const el = document.getElementById('totalDiamonds');
+        if (el) el.textContent = currentTotal.toLocaleString('th-TH');
+      }
+    });
+
+    // ================== Google Login (Popup) ==================
+    let GOOGLE_CLIENT_ID = null;
+    let googleCodeClient = null;
+
+    function initGoogleLogin() {
+      if (!GOOGLE_CLIENT_ID || !window.google?.accounts?.oauth2) return false;
+      googleCodeClient = google.accounts.oauth2.initCodeClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'openid email profile',
+        ux_mode: 'popup',
+        callback: handleGoogleAuthResponse,
+      });
+      return true;
+    }
+
+    async function loadAppConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        GOOGLE_CLIENT_ID = config.googleClientId;
+      } catch (e) {
+        console.error('Failed to load app config:', e);
+      }
+    }
+
+    function googleLogin() {
+      if (!googleCodeClient && !initGoogleLogin()) {
+        alert('กำลังโหลด Google Sign-In... ลองใหม่อีกครั้ง');
+        return;
+      }
+      googleCodeClient.requestCode({ prompt: 'select_account' });
+    }
+
+    function handleGoogleAuthResponse(response) {
+      if (response.error) return;
+
+      fetch('/google-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: response.code })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          currentUser = data;
+          showDashboard(data);
+        } else {
+          alert('Login ไม่สำเร็จ: ' + (data.error || ''));
+        }
+      })
+      .catch(() => alert('ไม่สามารถติดต่อเซิร์ฟเวอร์ได้'));
+    }
+
+    function showDashboard(user) {
+      document.getElementById('loginPage').style.display = 'none';
+      document.getElementById('dashboardPage').style.display = 'block';
+
+      let html = `ยินดีต้อนรับ <strong>${user.name}</strong>`;
+      if (user.picture) {
+        html = `<img src="${user.picture}" style="width:28px;height:28px;border-radius:50%;vertical-align:middle;margin-right:8px;">` + html;
+      }
+      html += `<br><small>${user.email}</small>`;
+      document.getElementById('userInfo').innerHTML = html;
+
+      // Prefill saved data
+      if (user.tiktokUsername) {
+        document.getElementById('tiktokUsername').value = user.tiktokUsername;
+      }
+      if (user.sessionId) {
+        document.getElementById('sessionId').value = user.sessionId;
+      }
+
+      // Load current server status (total + connection)
+      fetch('/api/status')
+        .then(r => r.json())
+        .then(status => {
+          if (status.totalDiamonds) {
+            currentTotal = status.totalDiamonds;
+            const el = document.getElementById('totalDiamonds');
+            if (el) el.textContent = currentTotal.toLocaleString('th-TH');
+          }
+          if (status.connected && status.username) {
+            isConnected = true;
+            updateConnectionStatus(true, status.username);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // ================== TikTok Connection ==================
+    async function connectTikTok() {
+      const tiktokUsername = document.getElementById('tiktokUsername').value.trim();
+      const sessionId = document.getElementById('sessionId').value.trim();
+
+      if (!tiktokUsername) {
+        return showMessage('กรุณากรอก TikTok Username', true);
+      }
+
+      showMessage('กำลังเชื่อมต่อ...', false);
+      updateConnectionStatus(false, tiktokUsername, true); // connecting
+
+      try {
+        const res = await fetch('/save-tiktok', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.email,
+            tiktokUsername,
+            sessionId: sessionId || null
+          })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          showMessage('✅ เชื่อมต่อสำเร็จ!', false);
+          isConnected = true;
+          updateConnectionStatus(true, tiktokUsername);
+        } else {
+          showMessage('❌ ' + (data.error || 'เชื่อมต่อล้มเหลว'), true);
+          updateConnectionStatus(false, tiktokUsername);
+        }
+      } catch (err) {
+        showMessage('❌ ไม่สามารถติดต่อเซิร์ฟเวอร์ได้', true);
+        updateConnectionStatus(false);
+      }
+    }
+
+    function saveOnly() {
+      const tiktokUsername = document.getElementById('tiktokUsername').value.trim();
+      const sessionId = document.getElementById('sessionId').value.trim();
+
+      if (!tiktokUsername) return showMessage('กรุณากรอก TikTok Username', true);
+
+      fetch('/save-tiktok', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentUser.email,
+          tiktokUsername,
+          sessionId: sessionId || null
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success) {
+          showMessage('บันทึกข้อมูลเรียบร้อย (ยังไม่ได้เชื่อมต่อ)', false);
+        } else {
+          showMessage(data.error || 'บันทึกไม่สำเร็จ', true);
+        }
+      });
+    }
+
+    async function disconnectTikTok() {
+      try {
+        await fetch('/disconnect-tiktok', { method: 'POST' });
+        isConnected = false;
+        updateConnectionStatus(false);
+        showMessage('ตัดการเชื่อมต่อแล้ว', false);
+      } catch (e) {
+        updateConnectionStatus(false);
+      }
+    }
+
+    function updateConnectionStatus(connected, username = '', connecting = false) {
+      const statusEl = document.getElementById('connectStatus');
+      const textEl = document.getElementById('statusText');
+
+      statusEl.className = 'status ' + (connected ? 'connected' : connecting ? 'connecting' : 'disconnected');
+
+      let dotColor = connected ? '#00ff88' : connecting ? '#ffcc66' : '#ff6666';
+      statusEl.querySelector('.status-dot').style.background = dotColor;
+
+      if (connected && username) {
+        textEl.textContent = `เชื่อมต่อกับ @${username} แล้ว`;
+      } else if (connecting) {
+        textEl.textContent = `กำลังเชื่อมต่อ @${username}...`;
+      } else {
+        textEl.textContent = username ? `ไม่ได้เชื่อมต่อ (@${username})` : 'ยังไม่ได้เชื่อมต่อ TikTok';
+      }
+    }
+
+    // ================== Actions ==================
+    async function resetJar() {
+      try {
+        const res = await fetch('/reset-jar', { method: 'POST' });
+        const data = await res.json();
+        currentTotal = 0;
+        document.getElementById('totalDiamonds').textContent = '0';
+        showMessage('รีเซ็ตโถเรียบร้อย', false);
+      } catch (e) {
+        showMessage('รีเซ็ตไม่สำเร็จ', true);
+      }
+    }
+
+    // ================== Overlays ==================
+    function generateOverlays() {
+      const base = window.location.origin;
+      const container = document.getElementById('overlay-box');
+      const urlsDiv = document.getElementById('urls');
+      container.style.display = 'block';
+
+      const overlays = [
+        { name: '🫙 Gift Jar (โถของขวัญ)', path: '/gift-jar.html' },
+        { name: '💬 Chat Overlay', path: '/chat-overlay.html' },
+        { name: '❤️ Top Likers', path: '/top-likers.html' },
+        { name: '❤️ Like Hearts', path: '/like-hearts.html' },
+      ];
+
+      let html = '';
+      overlays.forEach(o => {
+        const full = base + o.path;
+        html += `
+          <div class="overlay-item">
+            <div>
+              <strong>${o.name}</strong><br>
+              <span>${full}</span>
+            </div>
+            <div>
+              <button class="small-btn" onclick="copyToClipboard('${full}')">Copy</button>
+              <button class="small-btn" onclick="window.open('${full}', '_blank')">Open</button>
+            </div>
+          </div>
+        `;
+      });
+      urlsDiv.innerHTML = html;
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = event.target.innerText;
+        event.target.innerText = 'Copied!';
+        setTimeout(() => { if (event.target) event.target.innerText = orig; }, 1200);
+      }).catch(() => {
+        // fallback
+        const input = document.createElement('input');
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      });
+    }
+
+    // ================== Helpers ==================
+    function showMessage(msg, isError) {
+      const old = document.querySelector('.message');
+      if (old) old.remove();
+
+      const div = document.createElement('div');
+      div.className = 'message ' + (isError ? 'error' : 'success');
+      div.textContent = msg;
+      const dashboard = document.getElementById('dashboardPage');
+      dashboard.insertBefore(div, dashboard.firstChild);
+
+      setTimeout(() => div.remove(), 3500);
+    }
+
+    function logout() {
+      // Simple for now (can enhance with server logout later)
+      window.location.reload();
+    }
+
+    window.onload = async () => {
+      await loadAppConfig();
+      if (!initGoogleLogin()) {
+        const waitForGoogle = setInterval(() => {
+          if (initGoogleLogin()) clearInterval(waitForGoogle);
+        }, 200);
+      }
+    };
+  </script>
+</body>
+</html>
