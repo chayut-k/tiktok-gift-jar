@@ -17,7 +17,8 @@
       font-size: 26px;
       pointer-events: none;
       user-select: none;
-      animation: floatUp 5s ease forwards;
+      animation: floatUp 2.8s ease forwards;
+      will-change: transform, opacity;
       z-index: 10;
     }
     .avatar-heart {
@@ -28,13 +29,14 @@
       border: 2px solid #fff;
       box-shadow: 0 0 10px rgba(255,255,255,0.7);
       pointer-events: none;
-      animation: floatUp 5.2s ease forwards;
+      animation: floatUp 3s ease forwards;
+      will-change: transform, opacity;
       z-index: 11;
     }
     @keyframes floatUp {
       0% { transform: translateY(0) scale(0.5); opacity: 1; }
-      25% { transform: translateY(-100px) scale(1); opacity: 1; }
-      100% { transform: translateY(-420px) scale(0.6); opacity: 0; }
+      25% { transform: translateY(-80px) scale(1); opacity: 1; }
+      100% { transform: translateY(-340px) scale(0.6); opacity: 0; }
     }
   </style>
 </head>
@@ -45,17 +47,27 @@
     const socket = createOverlaySocket();
     const colors = ['#ff69b4', '#ff1493', '#c71585', '#da70d6', '#ba55d3', '#ff00ff'];
 
-    function createHeart(avatarUrl = null) {
-      const heart = document.createElement('div');
+    const MAX_HEARTS = 18;
+    const HIGH_LOAD_THRESHOLD = 10;
+    const LIKE_INTERVAL_MS = 200;
+    const MAX_QUEUE = 8;
 
-      // กำหนดตำแหน่งด้านซ้าย (5% - 32%)
+    let activeCount = 0;
+    const likeQueue = [];
+    let drainingQueue = false;
+
+    function createHeart(avatarUrl = null) {
+      if (activeCount >= MAX_HEARTS) return false;
+
+      const heart = document.createElement('div');
+      const duration = avatarUrl ? 3000 : 2800;
       const leftPos = 5 + Math.random() * 27;
 
       if (avatarUrl) {
         heart.className = 'avatar-heart';
         heart.style.left = leftPos + '%';
         heart.style.bottom = '25px';
-        heart.innerHTML = `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.removeChild(this);">`;
+        heart.innerHTML = `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.remove()">`;
       } else {
         heart.className = 'heart';
         heart.style.left = leftPos + '%';
@@ -64,31 +76,44 @@
         heart.innerHTML = '❤️';
       }
 
+      heart.style.animationDuration = duration + 'ms';
       document.body.appendChild(heart);
+      activeCount++;
 
       setTimeout(() => {
-        if (heart.parentNode) heart.parentNode.removeChild(heart);
-      }, 5500);
+        heart.remove();
+        activeCount--;
+      }, duration + 50);
+
+      return true;
     }
 
-    // หัวใจพื้นหลังลอยช้า ๆ (แค่ 2-3 จุด)
-    setInterval(() => {
-      if (Math.random() > 0.65) {
-        createHeart();
-      }
-    }, 650);
+    function spawnLike(data) {
+      const busy = activeCount >= HIGH_LOAD_THRESHOLD;
+      if (!createHeart()) return;
 
-    // รับ event จาก server
+      if (data.avatar && !busy && activeCount < MAX_HEARTS) {
+        setTimeout(() => createHeart(data.avatar), 150);
+      }
+    }
+
+    function drainLikeQueue() {
+      if (drainingQueue || likeQueue.length === 0) return;
+      drainingQueue = true;
+
+      const data = likeQueue.shift();
+      spawnLike(data);
+
+      setTimeout(() => {
+        drainingQueue = false;
+        drainLikeQueue();
+      }, LIKE_INTERVAL_MS);
+    }
+
     socket.on('like', (data) => {
-      // สร้างหัวใจธรรมดา
-      createHeart();
-
-      // ถ้ามี avatar ให้สร้างเพิ่ม
-      if (data.avatar) {
-        setTimeout(() => {
-          createHeart(data.avatar);
-        }, 220);
-      }
+      if (likeQueue.length >= MAX_QUEUE) return;
+      likeQueue.push(data);
+      drainLikeQueue();
     });
   </script>
 </body>

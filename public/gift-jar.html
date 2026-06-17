@@ -114,10 +114,11 @@
       gift.src = giftPictureUrl || 'images/coin.png';
       gift.onerror = () => { gift.src = 'images/coin.png'; };
       
-      let baseSize = 40;
-      let scale = diamonds >= 1000 ? 2.45 : 
-                 diamonds >= 500 ? 2.2 : 
-                 diamonds >= 100 ? 1.85 : Math.min(2.1, 0.85 + (diamonds / 55));
+      let baseSize = 38;
+      // let scale = diamonds >= 1000 ? 2.45 : 
+      //            diamonds >= 500 ? 2.2 : 
+      //            diamonds >= 100 ? 1.85 : Math.min(2.1, 0.85 + (diamonds / 55));
+      let scale = Math.min(2.1, 0.85 + (diamonds / 55));
       
       const size = Math.floor(baseSize * scale);
       gift.style.width = size + 'px';

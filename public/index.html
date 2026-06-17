@@ -167,11 +167,74 @@
       align-items: center;
       justify-content: center;
     }
-    .jar-preview-inline img {
-      max-height: 140px;
-      max-width: 100%;
+    .jar-demo-preview {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .jar-demo-stage {
+      position: relative;
+      width: 115px;
+      height: 155px;
+    }
+    .jar-demo-jar {
+      width: 100%;
+      height: 100%;
+      background: no-repeat center center;
+      background-size: contain;
+      filter: drop-shadow(0 8px 14px rgba(0,0,0,0.45));
+    }
+    .jar-demo-gifts {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      width: 68%;
+      height: 64px;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .jar-demo-gift {
+      position: absolute;
+      width: 22px;
+      height: 22px;
       object-fit: contain;
-      filter: drop-shadow(0 10px 18px rgba(0,0,0,0.45));
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.25));
+      animation: jarDemoFall 3.2s forwards;
+    }
+    @keyframes jarDemoFall {
+      0%   { transform: translateY(-112px) rotate(0deg); }
+      45%  { transform: translateY(15px) rotate(28deg); }
+      100% { transform: translateY(50px) rotate(52deg); }
+    }
+    .hearts-demo-preview {
+      background:
+        repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%) 50% / 14px 14px;
+      border: 1px solid #333;
+      border-radius: 10px;
+      min-height: 120px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hearts-demo-heart {
+      position: absolute;
+      font-size: 20px;
+      pointer-events: none;
+      user-select: none;
+      animation: heartsDemoFloat 2.8s ease forwards;
+      will-change: transform, opacity;
+      z-index: 2;
+    }
+    @keyframes heartsDemoFloat {
+      0% { transform: translateY(0) scale(0.5); opacity: 1; }
+      25% { transform: translateY(-50px) scale(1); opacity: 1; }
+      100% { transform: translateY(-200px) scale(0.6); opacity: 0; }
+    }
+    .preview-caption {
+      font-size: 12px;
+      color: #666;
+      margin: 6px 0 0;
     }
     .bg-preview-inline {
       background:
@@ -261,6 +324,11 @@
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
     let selectedTopGiftersBg = 'transparent';
+    let jarDemoTimer = null;
+    let heartsDemoTimer = null;
+    const heartsDemoTimeouts = [];
+
+    const HEART_DEMO_COLORS = ['#ff69b4', '#ff1493', '#c71585', '#da70d6', '#ba55d3', '#ff00ff'];
 
     const JAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((id) => ({
       id,
@@ -615,12 +683,76 @@
       return buildOverlayUrl('/gift-jar.html', connectedUsername, { jar: jarId });
     }
 
+    function updateJarDemoJarImage(jarId) {
+      const jarEl = document.getElementById('jarDemoJar');
+      if (jarEl) {
+        jarEl.style.backgroundImage = `url('/images/jar${jarId}.png')`;
+      }
+    }
+
+    function dropJarDemoGift() {
+      const giftsEl = document.getElementById('jarDemoGifts');
+      if (!giftsEl) return;
+
+      giftsEl.replaceChildren();
+      const gift = document.createElement('img');
+      gift.className = 'jar-demo-gift';
+      gift.src = '/images/rose.png';
+      gift.alt = 'ตัวอย่างของขวัญ';
+      gift.style.left = (15 + Math.random() * 40) + '%';
+      giftsEl.appendChild(gift);
+    }
+
+    function stopJarDemoAnimation() {
+      if (jarDemoTimer) {
+        clearInterval(jarDemoTimer);
+        jarDemoTimer = null;
+      }
+    }
+
+    function startJarDemoAnimation() {
+      stopJarDemoAnimation();
+      dropJarDemoGift();
+      jarDemoTimer = setInterval(dropJarDemoGift, 5000);
+    }
+
+    function spawnHeartsDemoHeart() {
+      const container = document.getElementById('heartsDemoPreview');
+      if (!container) return;
+
+      const heart = document.createElement('div');
+      heart.className = 'hearts-demo-heart';
+      heart.style.left = (8 + Math.random() * 22) + '%';
+      heart.style.bottom = '14px';
+      heart.style.color = HEART_DEMO_COLORS[Math.floor(Math.random() * HEART_DEMO_COLORS.length)];
+      heart.textContent = '❤️';
+      container.appendChild(heart);
+
+      const timeoutId = setTimeout(() => heart.remove(), 2900);
+      heartsDemoTimeouts.push(timeoutId);
+    }
+
+    function stopHeartsDemoAnimation() {
+      if (heartsDemoTimer) {
+        clearInterval(heartsDemoTimer);
+        heartsDemoTimer = null;
+      }
+      heartsDemoTimeouts.splice(0).forEach((id) => clearTimeout(id));
+      const container = document.getElementById('heartsDemoPreview');
+      if (container) container.replaceChildren();
+    }
+
+    function startHeartsDemoAnimation() {
+      stopHeartsDemoAnimation();
+      spawnHeartsDemoHeart();
+      heartsDemoTimer = setInterval(spawnHeartsDemoHeart, 900);
+    }
+
     function selectGiftJar(jarId) {
       selectedGiftJar = jarId;
       localStorage.setItem('tgj_selected_jar', String(jarId));
 
-      const preview = document.getElementById('jarPreviewInline');
-      if (preview) preview.src = `/images/jar${jarId}.png`;
+      updateJarDemoJarImage(jarId);
 
       const select = document.getElementById('jarSelect');
       if (select) select.value = String(jarId);
@@ -690,16 +822,87 @@
       });
       select.addEventListener('change', () => selectGiftJar(parseInt(select.value, 10)));
 
+      const previewCaption = document.createElement('p');
+      previewCaption.className = 'preview-caption';
+      previewCaption.textContent = 'ตัวอย่างของขวัญตกลงโถ (รีเซ็ตทุก 5 วินาที)';
+
       const previewWrap = document.createElement('div');
       previewWrap.className = 'jar-preview-inline';
-      const previewImg = document.createElement('img');
-      previewImg.id = 'jarPreviewInline';
-      previewImg.src = `/images/jar${selectedGiftJar}.png`;
-      previewImg.alt = 'ตัวอย่างโถ';
-      previewWrap.appendChild(previewImg);
 
-      pickerRow.append(pickerLabel, select, previewWrap);
+      const demo = document.createElement('div');
+      demo.className = 'jar-demo-preview';
+      demo.innerHTML = `
+        <div class="jar-demo-stage">
+          <div class="jar-demo-jar" id="jarDemoJar"></div>
+          <div class="jar-demo-gifts" id="jarDemoGifts"></div>
+        </div>
+      `;
+      previewWrap.appendChild(demo);
+
+      pickerRow.append(pickerLabel, select, previewWrap, previewCaption);
       item.appendChild(pickerRow);
+      updateJarDemoJarImage(selectedGiftJar);
+      startJarDemoAnimation();
+      return item;
+    }
+
+    function createLikeHeartsOverlayItem() {
+      const getUrl = () => buildOverlayUrl('/like-hearts.html', connectedUsername);
+
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+      item.style.flexDirection = 'column';
+      item.style.alignItems = 'stretch';
+
+      const top = document.createElement('div');
+      top.style.display = 'flex';
+      top.style.justifyContent = 'space-between';
+      top.style.alignItems = 'flex-start';
+      top.style.gap = '8px';
+
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      info.innerHTML = `
+        <strong>❤️ Like Hearts</strong><br>
+        <span id="likeHeartsLinkText">${getUrl()}</span>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'overlay-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'small-btn';
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => copyToClipboard(getUrl(), copyBtn));
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'small-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => window.open(getUrl(), '_blank'));
+
+      actions.append(copyBtn, openBtn);
+      top.append(info, actions);
+      item.appendChild(top);
+
+      const pickerRow = document.createElement('div');
+      pickerRow.className = 'jar-picker-row';
+
+      const pickerLabel = document.createElement('label');
+      pickerLabel.textContent = 'ตัวอย่างหัวใจลอยด้านซ้าย';
+
+      const previewCaption = document.createElement('p');
+      previewCaption.className = 'preview-caption';
+      previewCaption.textContent = 'หัวใจจะลอยขึ้นเมื่อมีคนกดไลค์ระหว่าง Live';
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'hearts-demo-preview';
+      previewWrap.id = 'heartsDemoPreview';
+
+      pickerRow.append(pickerLabel, previewWrap, previewCaption);
+      item.appendChild(pickerRow);
+      startHeartsDemoAnimation();
       return item;
     }
 
@@ -854,16 +1057,15 @@
       const urlsDiv = document.getElementById('urls');
       container.style.display = 'block';
 
-      const simpleOverlays = [
-        { name: '❤️ Like Hearts', path: '/like-hearts.html' },
-      ];
+      stopJarDemoAnimation();
+      stopHeartsDemoAnimation();
 
       urlsDiv.replaceChildren();
       urlsDiv.appendChild(createGiftJarOverlayItem());
       urlsDiv.appendChild(createChatOverlayItem());
       urlsDiv.appendChild(createTopLikersOverlayItem());
       urlsDiv.appendChild(createTopGiftersOverlayItem());
-      simpleOverlays.forEach((o) => urlsDiv.appendChild(createOverlayItem(o)));
+      urlsDiv.appendChild(createLikeHeartsOverlayItem());
     }
 
     function copyToClipboard(text, btn) {
