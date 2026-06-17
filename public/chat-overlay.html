@@ -23,9 +23,14 @@
       align-items: flex-start;
       margin-bottom: 12px;
       animation: fadeIn 0.4s ease;
-      background: rgba(0, 0, 0, 0.65);
       border-radius: 12px;
       padding: 10px 14px;
+    }
+    body[data-bg="transparent"] .chat-message {
+      background: transparent;
+    }
+    body[data-bg="dim"] .chat-message {
+      background: rgba(0, 0, 0, 0.45);
     }
     .avatar {
       width: 38px;
@@ -68,6 +73,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/overlay-socket.js"></script>
   <script>
+    document.body.dataset.bg = getOverlayBgId();
     const socket = createOverlaySocket();
     const chatContainer = document.getElementById('chat');
     const MAX_MESSAGES = 8;

@@ -16,11 +16,15 @@
     .liker {
       display: flex;
       align-items: center;
-      /* background: rgba(35, 35, 35, 0.92); */
       margin-bottom: 8px;
       padding: 9px 14px;
       border-radius: 12px;
-      /* box-shadow: 0 3px 12px rgba(0,0,0,0.5); */
+    }
+    body[data-bg="transparent"] .liker {
+      background: transparent;
+    }
+    body[data-bg="dim"] .liker {
+      background: rgba(0, 0, 0, 0.45);
     }
     .rank-container {
       width: 48px;
@@ -73,6 +77,7 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/overlay-socket.js"></script>
   <script>
+    document.body.dataset.bg = getOverlayBgId();
     const socket = createOverlaySocket();
     const container = document.getElementById('container');
 
