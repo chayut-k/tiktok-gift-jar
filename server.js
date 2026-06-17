@@ -147,7 +147,7 @@ app.use('/google-login', authLimiter);
 app.use('/auth/', authLimiter);
 
 // ================== Session ==================
-app.use(session({
+const sessionMiddleware = session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -158,8 +158,9 @@ app.use(session({
     secure: isProd,
     sameSite: isProd ? 'lax' : 'lax',
   },
-}));
+});
 
+app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(express.json({ limit: '16kb' }));
@@ -168,11 +169,300 @@ app.use(express.static('public', {
   etag: true,
 }));
 
-// ================== Global State ==================
-let currentConnection = null;
-let currentTikTokUsername = '';
-let totalDiamonds = 0;
-const likers = new Map();
+const wrapMiddleware = (middleware) => (socket, next) => {
+  middleware(socket.request, {}, next);
+};
+io.use(wrapMiddleware(sessionMiddleware));
+
+// ================== Per-User Stream State ==================
+const userStreams = new Map();
+const usernameOwners = new Map();
+
+function createStreamState(email) {
+  return {
+    email,
+    connection: null,
+    tiktokUsername: '',
+    totalDiamonds: 0,
+    likers: new Map(),
+    dashboardSockets: new Set(),
+  };
+}
+
+function getOrCreateStream(email) {
+  if (!userStreams.has(email)) {
+    userStreams.set(email, createStreamState(email));
+  }
+  return userStreams.get(email);
+}
+
+function getStreamRoom(username) {
+  return `stream:${username}`;
+}
+
+function getDashboardRoom(email) {
+  return `dashboard:${email}`;
+}
+
+function findStreamByUsername(username) {
+  const email = usernameOwners.get(username);
+  return email ? userStreams.get(email) : null;
+}
+
+function emitToStream(username, event, data) {
+  if (!username) return;
+  io.to(getStreamRoom(username)).emit(event, data);
+}
+
+function emitStreamStatus(email, connected, extra = {}) {
+  const stream = userStreams.get(email);
+  if (!stream?.tiktokUsername) return;
+
+  const payload = {
+    connected: !!connected,
+    username: stream.tiktokUsername,
+    ...extra,
+  };
+
+  io.to(getDashboardRoom(email)).emit('status', payload);
+  emitToStream(stream.tiktokUsername, 'status', payload);
+}
+
+function getAvatar(user) {
+  if (!user) return '';
+  const pic = user.profilePicture || user.profilePictureMedium || user.profilePictureLarge;
+  if (pic) {
+    if (Array.isArray(pic.urlList) && pic.urlList.length > 0) return pic.urlList[0];
+    if (Array.isArray(pic.url) && pic.url.length > 0) return pic.url[0];
+  }
+  return '';
+}
+
+function computeTopLikers(stream, limit = 5) {
+  return [...stream.likers.entries()]
+    .sort((a, b) => b[1].likes - a[1].likes)
+    .slice(0, limit)
+    .map(([username, data], index) => ({
+      rank: index + 1,
+      username,
+      nickname: data.nickname,
+      likes: data.likes,
+      avatar: data.avatar,
+    }));
+}
+
+function resetStreamCounters(stream) {
+  stream.totalDiamonds = 0;
+  stream.likers.clear();
+}
+
+function clearUsernameOwner(username, email) {
+  if (username && usernameOwners.get(username) === email) {
+    usernameOwners.delete(username);
+  }
+}
+
+function disconnectUserStream(email, reason = 'manual') {
+  const stream = userStreams.get(email);
+  if (!stream) return;
+
+  if (stream.connection) {
+    try { stream.connection.disconnect(); } catch (e) {}
+    stream.connection = null;
+  }
+
+  clearUsernameOwner(stream.tiktokUsername, email);
+  emitStreamStatus(email, false, reason ? { reason } : {});
+  console.log(`🔌 ตัดการเชื่อมต่อของ ${email} (${reason})`);
+}
+
+function syncOverlaySocket(socket, username) {
+  const stream = findStreamByUsername(username);
+  if (!stream) {
+    socket.emit('status', { connected: false, username });
+    return;
+  }
+
+  socket.emit('status', {
+    connected: !!stream.connection,
+    username: stream.tiktokUsername,
+  });
+
+  if (stream.totalDiamonds > 0) {
+    socket.emit('gift', {
+      user: '',
+      total: stream.totalDiamonds,
+      giftName: '',
+      giftPictureUrl: '',
+      diamonds: 0,
+      repeatCount: 0,
+    });
+  }
+
+  const top = computeTopLikers(stream);
+  if (top.length > 0) socket.emit('topLikers', top);
+}
+
+function registerDashboardSocket(socket, email) {
+  const stream = getOrCreateStream(email);
+  stream.dashboardSockets.add(socket.id);
+  socket.data.email = email;
+  socket.data.isDashboard = true;
+  socket.join(getDashboardRoom(email));
+
+  if (stream.tiktokUsername) {
+    socket.join(getStreamRoom(stream.tiktokUsername));
+    socket.emit('status', {
+      connected: !!stream.connection,
+      username: stream.tiktokUsername,
+    });
+  }
+
+  console.log(`🖥️ Dashboard online: ${email} (${stream.dashboardSockets.size} tab)`);
+}
+
+function unregisterDashboardSocket(email, socketId) {
+  const stream = userStreams.get(email);
+  if (!stream) return;
+
+  stream.dashboardSockets.delete(socketId);
+  console.log(`🖥️ Dashboard offline: ${email} (${stream.dashboardSockets.size} tab left)`);
+
+  if (stream.dashboardSockets.size === 0 && stream.connection) {
+    disconnectUserStream(email, 'dashboard_closed');
+  }
+}
+
+function registerOverlaySocket(socket, username) {
+  socket.data.streamUser = username;
+  socket.data.isOverlay = true;
+  socket.join(getStreamRoom(username));
+  console.log(`📺 Overlay joined stream:${username} (${socket.id})`);
+  syncOverlaySocket(socket, username);
+}
+
+function attachTikTokListeners(conn, email) {
+  const stream = getOrCreateStream(email);
+
+  conn.on(WebcastEvent.GIFT, (data) => {
+    try {
+      const diamonds = data.diamondCount
+        || (data.extendedGiftInfo && data.extendedGiftInfo.diamond_count)
+        || (data.giftDetails && data.giftDetails.diamondCount)
+        || 0;
+      if (diamonds <= 0) return;
+
+      const repeatEnd = data.repeatEnd === true || data.repeatEnd === 1;
+      if (!repeatEnd) return;
+
+      const repeatCount = data.repeatCount || 1;
+      stream.totalDiamonds += diamonds * repeatCount;
+
+      const giftPictureUrl = data.giftPictureUrl
+        || (data.extendedGiftInfo && data.extendedGiftInfo.image && data.extendedGiftInfo.image.url_list && data.extendedGiftInfo.image.url_list[0])
+        || (data.giftDetails && data.giftDetails.icon && data.giftDetails.icon.urlList && data.giftDetails.icon.urlList[0])
+        || null;
+
+      emitToStream(stream.tiktokUsername, 'gift', {
+        user: data.user?.nickname || data.user?.uniqueId || 'คนดู',
+        giftName: data.giftName || (data.giftDetails && data.giftDetails.giftName) || 'Unknown',
+        diamonds,
+        repeatCount,
+        total: stream.totalDiamonds,
+        giftPictureUrl,
+      });
+    } catch (err) {
+      console.error('GIFT handler error:', err);
+    }
+  });
+
+  conn.on(WebcastEvent.CHAT, (data) => {
+    emitToStream(stream.tiktokUsername, 'chat', {
+      nickname: data.user?.nickname || data.uniqueId || 'user',
+      comment: data.comment || '',
+      avatar: getAvatar(data.user),
+    });
+  });
+
+  conn.on(WebcastEvent.LIKE, (data) => {
+    try {
+      const uid = data.user?.uniqueId || data.uniqueId;
+      if (uid) {
+        const existing = stream.likers.get(uid) || {
+          nickname: data.user?.nickname || uid,
+          likes: 0,
+          avatar: getAvatar(data.user),
+        };
+        existing.likes += (data.likeCount || 1);
+        stream.likers.set(uid, existing);
+        emitToStream(stream.tiktokUsername, 'topLikers', computeTopLikers(stream));
+      }
+
+      emitToStream(stream.tiktokUsername, 'like', { avatar: getAvatar(data.user) });
+    } catch (err) {
+      console.error('LIKE handler error:', err);
+    }
+  });
+
+  conn.on('connected', (state) => {
+    console.log(`🔗 [${email}] Connected to room:`, state?.roomId);
+    emitStreamStatus(email, true);
+  });
+
+  conn.on('disconnected', () => {
+    console.log(`🔌 [${email}] TikTok disconnected`);
+    emitStreamStatus(email, false);
+  });
+
+  conn.on('streamEnd', () => {
+    console.log(`📺 [${email}] Stream ended`);
+    emitStreamStatus(email, false, { reason: 'stream_end' });
+  });
+
+  conn.on('error', (err) => {
+    console.error(`TikTok error [${email}]:`, err.message || err);
+    emitStreamStatus(email, false, { error: 'Connection error' });
+  });
+}
+
+async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = null) {
+  if (!tiktokUsername) throw new Error('TikTok Username หายไป');
+
+  const stream = getOrCreateStream(email);
+
+  if (stream.connection) {
+    try { stream.connection.disconnect(); } catch (e) {}
+    stream.connection = null;
+  }
+
+  if (stream.tiktokUsername && stream.tiktokUsername !== tiktokUsername) {
+    clearUsernameOwner(stream.tiktokUsername, email);
+  }
+
+  resetStreamCounters(stream);
+  stream.tiktokUsername = tiktokUsername;
+  usernameOwners.set(tiktokUsername, email);
+
+  const options = {
+    enableExtendedGiftInfo: true,
+    processInitialData: false,
+  };
+  if (sessionId) options.sessionId = sessionId;
+
+  stream.connection = new TikTokLiveConnection(tiktokUsername, options);
+  attachTikTokListeners(stream.connection, email);
+
+  try {
+    await stream.connection.connect();
+    console.log(`✅ [${email}] เชื่อมต่อ TikTok สำเร็จ: ${tiktokUsername}`);
+    emitStreamStatus(email, true);
+  } catch (err) {
+    stream.connection = null;
+    clearUsernameOwner(tiktokUsername, email);
+    stream.tiktokUsername = '';
+    throw err;
+  }
+}
 
 // ================== Google OAuth ==================
 passport.use(new GoogleStrategy({
@@ -229,37 +519,8 @@ function sanitizeEmail(email) {
   return cleaned;
 }
 
-function getAvatar(user) {
-  if (!user) return '';
-  const pic = user.profilePicture || user.profilePictureMedium || user.profilePictureLarge;
-  if (pic) {
-    if (Array.isArray(pic.urlList) && pic.urlList.length > 0) return pic.urlList[0];
-    if (Array.isArray(pic.url) && pic.url.length > 0) return pic.url[0];
-  }
-  return '';
-}
-
-function computeTopLikers(limit = 5) {
-  return [...likers.entries()]
-    .sort((a, b) => b[1].likes - a[1].likes)
-    .slice(0, limit)
-    .map(([username, data], index) => ({
-      rank: index + 1,
-      username,
-      nickname: data.nickname,
-      likes: data.likes,
-      avatar: data.avatar,
-    }));
-}
-
-function resetAllState() {
-  totalDiamonds = 0;
-  likers.clear();
-  console.log('🔄 State reset (total + likers)');
-}
-
-function emitStatus(connected, username = currentTikTokUsername) {
-  io.emit('status', { connected: !!connected, username });
+function getSessionEmail(req) {
+  return sanitizeEmail(req.session?.user?.email);
 }
 
 function mapTikTokError(err) {
@@ -268,131 +529,23 @@ function mapTikTokError(err) {
     return 'ไม่พบผู้ใช้ TikTok นี้ หรือยังไม่ได้เปิดไลฟ์';
   }
   if (msg.includes('blocked') || msg.includes('SIGI')) {
-    return 'ถูกบล็อกชั่วคราวจาก TikTok ลองใช้ Session ID หรือรอสักครู่';
+    return 'ถูกบล็อกชั่วคราวจาก TikTok ลองรอสักครู่';
   }
   return 'เชื่อมต่อไม่สำเร็จ';
 }
 
-// ================== TikTok Connection Logic ==================
-async function startTikTokConnection(tiktokUsername, sessionId = null) {
-  if (!tiktokUsername) throw new Error('TikTok Username หายไป');
-
-  if (currentConnection) {
-    try { currentConnection.disconnect(); } catch (e) {}
-    currentConnection = null;
-  }
-
-  resetAllState();
-  currentTikTokUsername = tiktokUsername;
-
-  const options = {
-    enableExtendedGiftInfo: true,
-    processInitialData: false,
-  };
-  if (sessionId) options.sessionId = sessionId;
-
-  currentConnection = new TikTokLiveConnection(tiktokUsername, options);
-  attachTikTokListeners(currentConnection);
-
-  try {
-    await currentConnection.connect();
-    console.log(`✅ เชื่อมต่อ TikTok สำเร็จ: ${tiktokUsername}`);
-    emitStatus(true);
-  } catch (err) {
-    currentConnection = null;
-    currentTikTokUsername = '';
-    throw err;
-  }
-}
-
-function attachTikTokListeners(conn) {
-  conn.on(WebcastEvent.GIFT, (data) => {
-    try {
-      const diamonds = data.diamondCount
-        || (data.extendedGiftInfo && data.extendedGiftInfo.diamond_count)
-        || (data.giftDetails && data.giftDetails.diamondCount)
-        || 0;
-      if (diamonds <= 0) return;
-
-      const repeatEnd = data.repeatEnd === true || data.repeatEnd === 1;
-      if (!repeatEnd) return;
-
-      const repeatCount = data.repeatCount || 1;
-      totalDiamonds += diamonds * repeatCount;
-
-      const giftPictureUrl = data.giftPictureUrl
-        || (data.extendedGiftInfo && data.extendedGiftInfo.image && data.extendedGiftInfo.image.url_list && data.extendedGiftInfo.image.url_list[0])
-        || (data.giftDetails && data.giftDetails.icon && data.giftDetails.icon.urlList && data.giftDetails.icon.urlList[0])
-        || null;
-
-      io.emit('gift', {
-        user: data.user?.nickname || data.user?.uniqueId || 'คนดู',
-        giftName: data.giftName || (data.giftDetails && data.giftDetails.giftName) || 'Unknown',
-        diamonds,
-        repeatCount,
-        total: totalDiamonds,
-        giftPictureUrl,
-      });
-    } catch (err) {
-      console.error('GIFT handler error:', err);
-    }
-  });
-
-  conn.on(WebcastEvent.CHAT, (data) => {
-    io.emit('chat', {
-      nickname: data.user?.nickname || data.uniqueId || 'user',
-      comment: data.comment || '',
-      avatar: getAvatar(data.user),
-    });
-  });
-
-  conn.on(WebcastEvent.LIKE, (data) => {
-    try {
-      const uid = data.user?.uniqueId || data.uniqueId;
-      if (uid) {
-        const existing = likers.get(uid) || {
-          nickname: data.user?.nickname || uid,
-          likes: 0,
-          avatar: getAvatar(data.user),
-        };
-        existing.likes += (data.likeCount || 1);
-        likers.set(uid, existing);
-        io.emit('topLikers', computeTopLikers());
-      }
-
-      io.emit('like', { avatar: getAvatar(data.user) });
-    } catch (err) {
-      console.error('LIKE handler error:', err);
-    }
-  });
-
-  conn.on('connected', (state) => {
-    console.log('🔗 Connected to room:', state?.roomId);
-    emitStatus(true);
-  });
-
-  conn.on('disconnected', () => {
-    console.log('🔌 Disconnected from TikTok');
-    emitStatus(false);
-  });
-
-  conn.on('streamEnd', () => {
-    console.log('📺 Stream ended');
-    emitStatus(false);
-  });
-
-  conn.on('error', (err) => {
-    console.error('TikTok connection error:', err.message || err);
-    io.emit('status', { connected: false, error: 'Connection error' });
-  });
-}
-
 // ================== Public API ==================
 app.get('/health', (req, res) => {
+  let activeConnections = 0;
+  userStreams.forEach((stream) => {
+    if (stream.connection) activeConnections += 1;
+  });
+
   res.json({
     status: 'ok',
     uptime: process.uptime(),
-    connected: !!currentConnection,
+    activeUsers: userStreams.size,
+    activeConnections,
   });
 });
 
@@ -414,6 +567,12 @@ async function buildGoogleUserResponse(payload) {
     if (users[email].tiktokUsername) userData.tiktokUsername = users[email].tiktokUsername;
     if (users[email].sessionId) userData.sessionId = users[email].sessionId;
     if (users[email].selectedJar) userData.selectedJar = users[email].selectedJar;
+  }
+
+  const stream = userStreams.get(email);
+  if (stream?.tiktokUsername) {
+    userData.connected = !!stream.connection;
+    userData.tiktokUsername = stream.tiktokUsername;
   }
 
   return userData;
@@ -446,6 +605,9 @@ app.get('/api/me', async (req, res) => {
 });
 
 app.post('/api/logout', (req, res) => {
+  const email = getSessionEmail(req);
+  if (email) disconnectUserStream(email, 'logout');
+
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({ success: false, error: 'Logout failed' });
@@ -503,22 +665,19 @@ app.post('/google-login', async (req, res) => {
 // ================== Protected Actions ==================
 app.post('/connect-tiktok', connectLimiter, async (req, res) => {
   try {
+    const email = getSessionEmail(req);
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
     const sessionId = req.body?.sessionId ? String(req.body.sessionId).trim().slice(0, 200) : null;
 
-    if (!tiktokUsername) {
-      return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
-    }
+    if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
+    if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
 
-    if (req.user?.emails) {
-      const email = req.user.emails[0].value;
-      if (!users[email]) users[email] = {};
-      users[email].tiktokUsername = tiktokUsername;
-      if (sessionId) users[email].sessionId = sessionId;
-      saveUsers();
-    }
+    if (!users[email]) users[email] = {};
+    users[email].tiktokUsername = tiktokUsername;
+    if (sessionId) users[email].sessionId = sessionId;
+    saveUsers();
 
-    await startTikTokConnection(tiktokUsername, sessionId);
+    await startTikTokConnectionForUser(email, tiktokUsername, sessionId);
     res.json({ success: true, username: tiktokUsername });
   } catch (err) {
     console.error('Connect error:', err);
@@ -530,24 +689,18 @@ app.post('/save-tiktok', connectLimiter, async (req, res) => {
   try {
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
     const sessionId = req.body?.sessionId ? String(req.body.sessionId).trim().slice(0, 200) : null;
-    const email = sanitizeEmail(req.body?.email)
-      || sanitizeEmail(req.session?.user?.email)
-      || (req.user?.emails ? req.user.emails[0].value : null);
+    const email = sanitizeEmail(req.body?.email) || getSessionEmail(req);
 
-    if (!tiktokUsername) {
-      return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
-    }
-    if (!email) {
-      return res.status(400).json({ error: 'ต้องการ email ที่ถูกต้อง' });
-    }
+    if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
+    if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
 
     if (!users[email]) users[email] = {};
     users[email].tiktokUsername = tiktokUsername;
     if (sessionId) users[email].sessionId = sessionId;
     saveUsers();
 
-    await startTikTokConnection(tiktokUsername, sessionId);
-    res.json({ success: true });
+    await startTikTokConnectionForUser(email, tiktokUsername, sessionId);
+    res.json({ success: true, username: tiktokUsername });
   } catch (err) {
     console.error('/save-tiktok error:', err);
     res.status(500).json({ error: mapTikTokError(err) });
@@ -555,25 +708,47 @@ app.post('/save-tiktok', connectLimiter, async (req, res) => {
 });
 
 app.post('/reset-jar', actionLimiter, (req, res) => {
-  resetAllState();
-  io.emit('gift', { total: 0, user: '', giftName: '', giftPictureUrl: '', diamonds: 0, repeatCount: 0 });
+  const email = getSessionEmail(req);
+  if (!email) return res.status(401).json({ success: false, error: 'กรุณา Login ก่อน' });
+
+  const stream = userStreams.get(email);
+  if (!stream) return res.json({ success: true, total: 0 });
+
+  resetStreamCounters(stream);
+  emitToStream(stream.tiktokUsername, 'gift', {
+    total: 0, user: '', giftName: '', giftPictureUrl: '', diamonds: 0, repeatCount: 0,
+  });
   res.json({ success: true, total: 0 });
 });
 
 app.post('/disconnect-tiktok', actionLimiter, (req, res) => {
-  if (currentConnection) {
-    currentConnection.disconnect();
-    currentConnection = null;
-  }
-  emitStatus(false);
+  const email = getSessionEmail(req);
+  if (!email) return res.status(401).json({ success: false, error: 'กรุณา Login ก่อน' });
+
+  disconnectUserStream(email, 'manual');
   res.json({ success: true });
 });
 
 app.get('/api/status', (req, res) => {
+  const email = getSessionEmail(req);
+  if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
+
+  const stream = userStreams.get(email);
+  if (!stream) {
+    return res.json({
+      connected: false,
+      username: users[email]?.tiktokUsername || null,
+      totalDiamonds: 0,
+      dashboardRequired: true,
+    });
+  }
+
   res.json({
-    connected: !!currentConnection,
-    username: currentTikTokUsername || null,
-    totalDiamonds,
+    connected: !!stream.connection,
+    username: stream.tiktokUsername || null,
+    totalDiamonds: stream.totalDiamonds,
+    dashboardActive: stream.dashboardSockets.size > 0,
+    dashboardRequired: true,
   });
 });
 
@@ -588,28 +763,24 @@ app.use((err, req, res, next) => {
 
 // ================== Socket.IO ==================
 io.on('connection', (socket) => {
-  console.log('🖥️ Overlay connected:', socket.id);
+  const sessionEmail = sanitizeEmail(socket.request.session?.user?.email);
+  const overlayUser = sanitizeTikTokUsername(socket.handshake.query?.user);
 
-  if (currentTikTokUsername) {
-    socket.emit('status', {
-      connected: !!currentConnection,
-      username: currentTikTokUsername,
-    });
+  if (sessionEmail) {
+    registerDashboardSocket(socket, sessionEmail);
+  } else if (overlayUser) {
+    registerOverlaySocket(socket, overlayUser);
+  } else {
+    console.log(`⚠️ Socket ${socket.id} rejected (no session / no user param)`);
+    socket.disconnect(true);
+    return;
   }
 
-  if (totalDiamonds > 0) {
-    socket.emit('gift', {
-      user: '',
-      total: totalDiamonds,
-      giftName: '',
-      giftPictureUrl: '',
-      diamonds: 0,
-      repeatCount: 0,
-    });
-  }
-
-  const top = computeTopLikers();
-  if (top.length > 0) socket.emit('topLikers', top);
+  socket.on('disconnect', () => {
+    if (socket.data.isDashboard && socket.data.email) {
+      unregisterDashboardSocket(socket.data.email, socket.id);
+    }
+  });
 });
 
 // ================== Start & Graceful Shutdown ==================
@@ -618,13 +789,16 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`   URL: ${APP_URL}`);
   console.log(`   Health: ${APP_URL}/health`);
   console.log(`   Users file: ${USERS_FILE}`);
+  console.log('   Mode: multi-user (per-stream rooms)');
 });
 
 function shutdown(signal) {
   console.log(`\n${signal} received — shutting down...`);
-  if (currentConnection) {
-    try { currentConnection.disconnect(); } catch (e) {}
-  }
+  userStreams.forEach((stream, email) => {
+    if (stream.connection) {
+      try { stream.connection.disconnect(); } catch (e) {}
+    }
+  });
   httpServer.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 10000);
 }

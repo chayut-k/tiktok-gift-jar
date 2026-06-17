@@ -40,8 +40,9 @@
 </head>
 <body>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js"></script>
   <script>
-    const socket = io();
+    const socket = createOverlaySocket();
     const colors = ['#ff69b4', '#ff1493', '#c71585', '#da70d6', '#ba55d3', '#ff00ff'];
 
     function createHeart(avatarUrl = null) {

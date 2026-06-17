@@ -71,8 +71,9 @@
   <div id="container"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js"></script>
   <script>
-    const socket = io();
+    const socket = createOverlaySocket();
     const container = document.getElementById('container');
 
     function getMedal(rank) {

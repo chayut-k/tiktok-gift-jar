@@ -89,6 +89,7 @@
   <div class="label" id="last-gift">รอของขวัญ...</div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js"></script>
   <script>
     function getJarImage() {
       const jarParam = parseInt(new URLSearchParams(window.location.search).get('jar') || '1', 10);
@@ -98,7 +99,7 @@
 
     document.getElementById('jar').style.backgroundImage = `url('${getJarImage()}')`;
 
-    const socket = io();
+    const socket = createOverlaySocket();
     let total = 0;
     const maxGoal = 50000;
     let giftCount = 0;

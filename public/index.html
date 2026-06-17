@@ -173,12 +173,23 @@
       object-fit: contain;
       filter: drop-shadow(0 10px 18px rgba(0,0,0,0.45));
     }
+    .dashboard-warning {
+      background: #332200;
+      color: #ffcc66;
+      border: 1px solid #cc9900;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin: 12px 0;
+      font-size: 13px;
+      text-align: left;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body>
   <div class="container" id="loginPage">
     <h1>🎥 TikTok Live Overlay</h1>
-    <p style="color:#888">คล้าย Tikfinity - Gift Jar + Alerts</p>
+    <p style="color:#888">Likes - Gift Jar + Alerts</p>
     
     <button class="google-btn" id="googleLoginBtn" type="button">
       <img src="images/icons8-google-48.png" width="22" height="22">
@@ -192,6 +203,10 @@
     
     <!-- User -->
     <div id="userInfo" class="status connected"></div>
+
+    <div class="dashboard-warning">
+      ⚠️ <strong>สำคัญ:</strong> ต้องเปิดแท็บ Dashboard ค้างไว้ระหว่าง Live — ปิดแท็บนี้จะตัดการเชื่อมต่อ TikTok อัตโนมัติ
+    </div>
 
     <!-- Connection Status -->
     <div id="connectStatus" class="status disconnected">
@@ -227,7 +242,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
+    const socket = io({ withCredentials: true });
     let currentUser = null;
     let isConnected = false;
     let connectedUsername = '';
@@ -272,6 +287,12 @@
       }
       updateConnectionStatus(data.connected, data.username);
       updateOverlayUI();
+
+      if (data.reason === 'dashboard_closed') {
+        showMessage('⚠️ การเชื่อมต่อ TikTok ถูกตัดเพราะปิด Dashboard', true);
+      } else if (data.reason === 'stream_end') {
+        showMessage('📴 Live จบแล้ว', false);
+      }
     });
 
     // ================== Google Login (Popup) ==================
@@ -321,6 +342,7 @@
         const res = await fetch('/google-login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ code: response.code }),
         });
         const data = await res.json();
@@ -367,7 +389,7 @@
 
       loadSavedJarPreference();
 
-      fetch('/api/status')
+      fetch('/api/status', { credentials: 'include' })
         .then(r => r.json())
         .then(status => {
           if (status.connected && status.username) {
@@ -395,6 +417,7 @@
         const res = await fetch('/save-tiktok', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             email: currentUser.email,
             tiktokUsername,
@@ -428,6 +451,7 @@
       fetch('/save-tiktok', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           email: currentUser.email,
           tiktokUsername,
@@ -445,7 +469,7 @@
 
     async function disconnectTikTok() {
       try {
-        await fetch('/disconnect-tiktok', { method: 'POST' });
+        await fetch('/disconnect-tiktok', { method: 'POST', credentials: 'include' });
         isConnected = false;
         connectedUsername = '';
         updateConnectionStatus(false);

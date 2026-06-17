@@ -66,8 +66,9 @@
   <div class="chat-container" id="chat"></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js"></script>
   <script>
-    const socket = io();
+    const socket = createOverlaySocket();
     const chatContainer = document.getElementById('chat');
     const MAX_MESSAGES = 8;
 
