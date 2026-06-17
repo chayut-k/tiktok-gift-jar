@@ -404,6 +404,7 @@ async function buildGoogleUserResponse(payload) {
   const email = payload.email;
   const userData = {
     success: true,
+    loggedIn: true,
     name: payload.name || payload.email,
     email,
     picture: payload.picture || null,
@@ -412,10 +413,47 @@ async function buildGoogleUserResponse(payload) {
   if (users[email]) {
     if (users[email].tiktokUsername) userData.tiktokUsername = users[email].tiktokUsername;
     if (users[email].sessionId) userData.sessionId = users[email].sessionId;
+    if (users[email].selectedJar) userData.selectedJar = users[email].selectedJar;
   }
 
   return userData;
 }
+
+function saveSessionUser(req, userData) {
+  req.session.user = {
+    email: userData.email,
+    name: userData.name,
+    picture: userData.picture,
+  };
+}
+
+app.get('/api/me', async (req, res) => {
+  if (!req.session?.user?.email) {
+    return res.status(401).json({ success: false, loggedIn: false });
+  }
+
+  try {
+    const userData = await buildGoogleUserResponse({
+      email: req.session.user.email,
+      name: req.session.user.name,
+      picture: req.session.user.picture,
+    });
+    res.json(userData);
+  } catch (err) {
+    console.error('/api/me error:', err.message);
+    res.status(500).json({ success: false, loggedIn: false });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ success: false, error: 'Logout failed' });
+    }
+    res.clearCookie('tgj.sid');
+    res.json({ success: true });
+  });
+});
 
 app.post('/google-login', async (req, res) => {
   const { credential, code } = req.body || {};
@@ -447,7 +485,15 @@ app.post('/google-login', async (req, res) => {
       payload = ticket.getPayload();
     }
 
-    res.json(await buildGoogleUserResponse(payload));
+    const userData = await buildGoogleUserResponse(payload);
+    saveSessionUser(req, userData);
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        console.error('Session save failed:', saveErr.message);
+        return res.status(500).json({ success: false, error: 'บันทึก session ไม่สำเร็จ' });
+      }
+      res.json(userData);
+    });
   } catch (err) {
     console.error('Google token verify failed:', err.message);
     res.status(401).json({ success: false, error: 'Google login ไม่ถูกต้อง' });
@@ -485,6 +531,7 @@ app.post('/save-tiktok', connectLimiter, async (req, res) => {
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
     const sessionId = req.body?.sessionId ? String(req.body.sessionId).trim().slice(0, 200) : null;
     const email = sanitizeEmail(req.body?.email)
+      || sanitizeEmail(req.session?.user?.email)
       || (req.user?.emails ? req.user.emails[0].value : null);
 
     if (!tiktokUsername) {
