@@ -138,6 +138,80 @@
       vertical-align: middle;
       margin-right: 8px;
     }
+    .overlay-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .jar-selected-label { font-size: 12px; color: #888; margin-top: 4px; }
+
+    .jar-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .jar-modal.open { display: flex; }
+    .jar-modal-content {
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 14px;
+      padding: 20px;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+    }
+    .jar-modal-content h3 { color: #ff0050; margin: 0 0 14px; }
+    .jar-preview-large {
+      background: #111;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      min-height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #333;
+    }
+    .jar-preview-large img {
+      max-height: 200px;
+      max-width: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 12px 20px rgba(0,0,0,0.5));
+    }
+    .jar-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .jar-option {
+      background: #222;
+      border: 2px solid #444;
+      border-radius: 10px;
+      padding: 8px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .jar-option:hover { border-color: #ff0050; }
+    .jar-option.selected { border-color: #00cc00; background: #1a2a1a; }
+    .jar-option img {
+      width: 100%;
+      height: 90px;
+      object-fit: contain;
+    }
+    .jar-option span {
+      display: block;
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 4px;
+    }
+    .jar-modal-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
   </style>
 </head>
 <body>
@@ -190,12 +264,34 @@
     <button class="btn btn-secondary" id="logoutBtn" type="button" style="margin-top:10px;">ออกจากระบบ</button>
   </div>
 
+  <div class="jar-modal" id="jarPickerModal" aria-hidden="true">
+    <div class="jar-modal-content">
+      <h3>🫙 เลือกรูปโถของขวัญ</h3>
+      <div class="jar-preview-large">
+        <img id="jarPreviewLarge" src="/images/jar1.png" alt="ตัวอย่างโถ">
+      </div>
+      <div class="jar-grid" id="jarGrid"></div>
+      <div class="jar-modal-actions">
+        <button class="btn btn-primary" id="jarModalCopyBtn" type="button">Copy ลิงก์</button>
+        <button class="btn btn-secondary" id="jarModalOpenBtn" type="button">เปิดลิงก์</button>
+        <button class="btn btn-secondary" id="jarModalCloseBtn" type="button">ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
     let currentUser = null;
     let isConnected = false;
     let connectedUsername = '';
+    let selectedGiftJar = 1;
+
+    const JAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((id) => ({
+      id,
+      image: `/images/jar${id}.png`,
+      label: `โถ ${id}`,
+    }));
 
     // ================== Socket Events ==================
     socket.on('status', (data) => {
@@ -427,10 +523,133 @@
       }
     }
 
-    function buildOverlayUrl(path, username) {
+    function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);
       url.searchParams.set('user', username);
+      Object.entries(extraParams).forEach(([key, value]) => {
+        url.searchParams.set(key, value);
+      });
       return url.toString();
+    }
+
+    function getGiftJarUrl(jarId = selectedGiftJar) {
+      return buildOverlayUrl('/gift-jar.html', connectedUsername, { jar: jarId });
+    }
+
+    function initJarPicker() {
+      const grid = document.getElementById('jarGrid');
+      grid.replaceChildren();
+
+      JAR_OPTIONS.forEach((jar) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'jar-option' + (jar.id === selectedGiftJar ? ' selected' : '');
+        btn.dataset.jarId = jar.id;
+        btn.innerHTML = `<img src="${jar.image}" alt="${jar.label}"><span>${jar.label}</span>`;
+        btn.addEventListener('click', () => selectGiftJar(jar.id));
+        grid.appendChild(btn);
+      });
+
+      document.getElementById('jarPreviewLarge').src = `/images/jar${selectedGiftJar}.png`;
+    }
+
+    function selectGiftJar(jarId) {
+      selectedGiftJar = jarId;
+      document.getElementById('jarPreviewLarge').src = `/images/jar${jarId}.png`;
+      document.querySelectorAll('.jar-option').forEach((el) => {
+        el.classList.toggle('selected', Number(el.dataset.jarId) === jarId);
+      });
+      updateGiftJarLinkDisplay();
+    }
+
+    function openJarPicker() {
+      if (!isConnected || !connectedUsername) {
+        return showMessage('กรุณาเชื่อมต่อ TikTok ก่อน', true);
+      }
+      initJarPicker();
+      const modal = document.getElementById('jarPickerModal');
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeJarPicker() {
+      const modal = document.getElementById('jarPickerModal');
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function updateGiftJarLinkDisplay() {
+      const label = document.getElementById('giftJarSelectedLabel');
+      const link = document.getElementById('giftJarLinkText');
+      if (!label || !link) return;
+      label.textContent = `เลือกแล้ว: โถ ${selectedGiftJar}`;
+      link.textContent = getGiftJarUrl();
+    }
+
+    function createGiftJarOverlayItem() {
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+      item.style.flexDirection = 'column';
+      item.style.alignItems = 'stretch';
+
+      const top = document.createElement('div');
+      top.style.display = 'flex';
+      top.style.justifyContent = 'space-between';
+      top.style.alignItems = 'flex-start';
+      top.style.gap = '8px';
+
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      info.innerHTML = `
+        <strong>🫙 Gift Jar (โถของขวัญ)</strong><br>
+        <span id="giftJarLinkText">${getGiftJarUrl()}</span>
+        <div class="jar-selected-label" id="giftJarSelectedLabel">เลือกแล้ว: โถ ${selectedGiftJar}</div>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'overlay-actions';
+
+      const pickBtn = document.createElement('button');
+      pickBtn.className = 'small-btn';
+      pickBtn.type = 'button';
+      pickBtn.textContent = 'เลือกโถ';
+      pickBtn.addEventListener('click', openJarPicker);
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'small-btn';
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => copyToClipboard(getGiftJarUrl(), copyBtn));
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'small-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => window.open(getGiftJarUrl(), '_blank'));
+
+      actions.append(pickBtn, copyBtn, openBtn);
+      top.append(info, actions);
+      item.appendChild(top);
+      return item;
+    }
+
+    function createOverlayItem(overlay) {
+      const full = buildOverlayUrl(overlay.path, connectedUsername);
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+      item.innerHTML = `
+        <div>
+          <strong>${overlay.name}</strong><br>
+          <span>${full}</span>
+        </div>
+        <div class="overlay-actions">
+          <button class="small-btn" type="button" data-action="copy">Copy</button>
+          <button class="small-btn" type="button" data-action="open">Open</button>
+        </div>
+      `;
+      item.querySelector('[data-action="copy"]').addEventListener('click', (e) => copyToClipboard(full, e.currentTarget));
+      item.querySelector('[data-action="open"]').addEventListener('click', () => window.open(full, '_blank'));
+      return item;
     }
 
     function generateOverlays() {
@@ -449,25 +668,9 @@
         { name: '❤️ Like Hearts', path: '/like-hearts.html' },
       ];
 
-      urlsDiv.innerHTML = '';
-      overlays.forEach(o => {
-        const full = buildOverlayUrl(o.path, connectedUsername);
-        const item = document.createElement('div');
-        item.className = 'overlay-item';
-        item.innerHTML = `
-          <div>
-            <strong>${o.name}</strong><br>
-            <span>${full}</span>
-          </div>
-          <div>
-            <button class="small-btn" type="button" data-action="copy">Copy</button>
-            <button class="small-btn" type="button" data-action="open">Open</button>
-          </div>
-        `;
-        item.querySelector('[data-action="copy"]').addEventListener('click', (e) => copyToClipboard(full, e.currentTarget));
-        item.querySelector('[data-action="open"]').addEventListener('click', () => window.open(full, '_blank'));
-        urlsDiv.appendChild(item);
-      });
+      urlsDiv.replaceChildren();
+      urlsDiv.appendChild(createGiftJarOverlayItem());
+      overlays.slice(1).forEach((o) => urlsDiv.appendChild(createOverlayItem(o)));
     }
 
     function copyToClipboard(text, btn) {
@@ -511,6 +714,18 @@
       document.getElementById('saveOnlyBtn').addEventListener('click', saveOnly);
       document.getElementById('disconnectBtn').addEventListener('click', disconnectTikTok);
       document.getElementById('generateOverlaysBtn').addEventListener('click', generateOverlays);
+      document.getElementById('jarModalCopyBtn').addEventListener('click', () => {
+        copyToClipboard(getGiftJarUrl(), document.getElementById('jarModalCopyBtn'));
+        updateGiftJarLinkDisplay();
+      });
+      document.getElementById('jarModalOpenBtn').addEventListener('click', () => {
+        window.open(getGiftJarUrl(), '_blank');
+        updateGiftJarLinkDisplay();
+      });
+      document.getElementById('jarModalCloseBtn').addEventListener('click', closeJarPicker);
+      document.getElementById('jarPickerModal').addEventListener('click', (e) => {
+        if (e.target.id === 'jarPickerModal') closeJarPicker();
+      });
       document.getElementById('logoutBtn').addEventListener('click', logout);
     }
 
