@@ -236,6 +236,31 @@
       color: #666;
       margin: 6px 0 0;
     }
+    .physics-preview-wrap {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 10px;
+      overflow: hidden;
+      height: 300px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .physics-preview-scaler {
+      width: 460px;
+      height: 620px;
+      transform: scale(0.48);
+      transform-origin: top center;
+      flex-shrink: 0;
+    }
+    .physics-preview-frame {
+      width: 460px;
+      height: 620px;
+      border: none;
+      background: transparent;
+      pointer-events: none;
+      display: block;
+    }
     .bg-preview-inline {
       background:
         repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%) 50% / 14px 14px;
@@ -321,6 +346,7 @@
     let isConnected = false;
     let connectedUsername = '';
     let selectedGiftJar = 1;
+    let selectedPhysicsJar = 'jar1';
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
     let selectedTopGiftersBg = 'transparent';
@@ -336,6 +362,12 @@
       label: `โถ ${id}`,
     }));
 
+    const PHYSICS_JAR_OPTIONS = [
+      { id: 'jar1', image: '/images/jar1.png', label: 'โถแก้ว Mason (jar1)' },
+      { id: 'jar5', image: '/images/jar5.png', label: 'โถแก้วกลม (jar5)' },
+      { id: 'jar6', image: '/images/jar6.png', label: 'โถแก้วแมว (jar6)' },
+    ];
+
     const BG_STYLE_OPTIONS = [
       { id: 'transparent', label: 'ใสโปร่งใส' },
       { id: 'dim', label: 'ดำอ่อน (มองทะลุได้)' },
@@ -345,6 +377,10 @@
       const saved = parseInt(localStorage.getItem('tgj_selected_jar') || '1', 10);
       if (Number.isFinite(saved)) {
         selectedGiftJar = Math.min(6, Math.max(1, saved));
+      }
+      const savedPhysics = localStorage.getItem('tgj_selected_physics_jar');
+      if (savedPhysics && PHYSICS_JAR_OPTIONS.some((jar) => jar.id === savedPhysics)) {
+        selectedPhysicsJar = savedPhysics;
       }
     }
 
@@ -683,6 +719,41 @@
       return buildOverlayUrl('/gift-jar.html', connectedUsername, { jar: jarId });
     }
 
+    function getGiftJarPhysicsUrl(jarId = selectedPhysicsJar) {
+      return buildOverlayUrl('/gift-jar-physics.html', connectedUsername, { jar: jarId });
+    }
+
+    function setPhysicsPreviewFrame(jarId = selectedPhysicsJar) {
+      const frame = document.getElementById('physicsJarPreview');
+      if (!frame) return;
+      const url = new URL('/gift-jar-physics.html', window.location.origin);
+      url.searchParams.set('jar', jarId);
+      url.searchParams.set('preview', '1');
+      frame.src = 'about:blank';
+      setTimeout(() => {
+        frame.src = url.toString();
+      }, 50);
+    }
+
+    function selectPhysicsJar(jarId) {
+      selectedPhysicsJar = jarId;
+      localStorage.setItem('tgj_selected_physics_jar', jarId);
+
+      const thumb = document.getElementById('physicsJarThumb');
+      if (thumb) {
+        const jar = PHYSICS_JAR_OPTIONS.find((item) => item.id === jarId);
+        if (jar) thumb.src = jar.image;
+      }
+
+      const select = document.getElementById('physicsJarSelect');
+      if (select) select.value = jarId;
+
+      const link = document.getElementById('giftJarPhysicsLinkText');
+      if (link) link.textContent = getGiftJarPhysicsUrl(jarId);
+
+      setPhysicsPreviewFrame(jarId);
+    }
+
     function updateJarDemoJarImage(jarId) {
       const jarEl = document.getElementById('jarDemoJar');
       if (jarEl) {
@@ -780,7 +851,7 @@
       const info = document.createElement('div');
       info.style.flex = '1';
       info.innerHTML = `
-        <strong>🫙 Gift Jar (โถของขวัญ)</strong><br>
+        <strong>🫙 Gift Jar (แบบเดิม)</strong><br>
         <span id="giftJarLinkText">${getGiftJarUrl()}</span>
       `;
 
@@ -843,6 +914,107 @@
       item.appendChild(pickerRow);
       updateJarDemoJarImage(selectedGiftJar);
       startJarDemoAnimation();
+      return item;
+    }
+
+    function createGiftJarPhysicsOverlayItem() {
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+      item.style.flexDirection = 'column';
+      item.style.alignItems = 'stretch';
+
+      const top = document.createElement('div');
+      top.style.display = 'flex';
+      top.style.justifyContent = 'space-between';
+      top.style.alignItems = 'flex-start';
+      top.style.gap = '8px';
+
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      info.innerHTML = `
+        <strong>🫙 Gift Jar (ฟิสิกส์)</strong><br>
+        <span id="giftJarPhysicsLinkText">${getGiftJarPhysicsUrl()}</span>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'overlay-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'small-btn';
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => copyToClipboard(getGiftJarPhysicsUrl(), copyBtn));
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'small-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => window.open(getGiftJarPhysicsUrl(), '_blank'));
+
+      actions.append(copyBtn, openBtn);
+      top.append(info, actions);
+      item.appendChild(top);
+
+      const pickerRow = document.createElement('div');
+      pickerRow.className = 'jar-picker-row';
+
+      const pickerLabel = document.createElement('label');
+      pickerLabel.textContent = 'เลือกรูปโถ (ฟิสิกส์)';
+      pickerLabel.setAttribute('for', 'physicsJarSelect');
+
+      const controls = document.createElement('div');
+      controls.style.display = 'flex';
+      controls.style.gap = '10px';
+      controls.style.alignItems = 'center';
+      controls.style.marginBottom = '8px';
+
+      const select = document.createElement('select');
+      select.id = 'physicsJarSelect';
+      select.className = 'jar-select';
+      select.style.margin = '0';
+      PHYSICS_JAR_OPTIONS.forEach((jar) => {
+        const option = document.createElement('option');
+        option.value = jar.id;
+        option.textContent = jar.label;
+        if (jar.id === selectedPhysicsJar) option.selected = true;
+        select.appendChild(option);
+      });
+      select.addEventListener('change', () => selectPhysicsJar(select.value));
+
+      const thumb = document.createElement('img');
+      thumb.id = 'physicsJarThumb';
+      thumb.src = PHYSICS_JAR_OPTIONS.find((jar) => jar.id === selectedPhysicsJar)?.image || '/images/jar1.png';
+      thumb.alt = 'ตัวอย่างโถ';
+      thumb.style.width = '52px';
+      thumb.style.height = '68px';
+      thumb.style.objectFit = 'contain';
+      thumb.style.background = '#111';
+      thumb.style.borderRadius = '6px';
+      thumb.style.border = '1px solid #444';
+
+      controls.append(select, thumb);
+
+      const previewCaption = document.createElement('p');
+      previewCaption.className = 'preview-caption';
+      previewCaption.textContent = 'ตัวอย่างของขวัญตกลงโถด้วยฟิสิกส์ (กุหลาบ)';
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'physics-preview-wrap';
+
+      const scaler = document.createElement('div');
+      scaler.className = 'physics-preview-scaler';
+
+      const frame = document.createElement('iframe');
+      frame.id = 'physicsJarPreview';
+      frame.className = 'physics-preview-frame';
+      frame.title = 'ตัวอย่างโถแก้วฟิสิกส์';
+
+      scaler.appendChild(frame);
+      previewWrap.appendChild(scaler);
+
+      pickerRow.append(pickerLabel, controls, previewWrap, previewCaption);
+      item.appendChild(pickerRow);
+      setPhysicsPreviewFrame(selectedPhysicsJar);
       return item;
     }
 
@@ -1061,6 +1233,7 @@
       stopHeartsDemoAnimation();
 
       urlsDiv.replaceChildren();
+      urlsDiv.appendChild(createGiftJarPhysicsOverlayItem());
       urlsDiv.appendChild(createGiftJarOverlayItem());
       urlsDiv.appendChild(createChatOverlayItem());
       urlsDiv.appendChild(createTopLikersOverlayItem());
