@@ -1,19 +1,21 @@
+const STAGE_CENTER_X = 230;
+
 const JAR_CONFIGS = {
   jar1: {
     label: 'โถแก้ว Mason (jar1)',
     image: '/images/jar1.png',
     physics: {
-      centerX: 230,
+      centerX: STAGE_CENTER_X,
       floorY: 528,
-      innerLeft: 94,
-      innerRight: 366,
-      wallTopY: 210,
+      innerLeft: 98,
+      innerRight: 362,
+      wallTopY: 218,
       mouthY: 88,
-      mouthHalfWidth: 58,
-      neckInset: 28,
-      floorWidth: 286,
-      wallHeight: 228,
-      wallCenterY: 418
+      mouthHalfWidth: 54,
+      neckInset: 22,
+      floorWidth: 278,
+      wallHeight: 210,
+      wallCenterY: 422
     },
     classic: {
       giftsBottom: 95,
@@ -30,17 +32,17 @@ const JAR_CONFIGS = {
     label: 'โถแก้วกลม (jar5)',
     image: '/images/jar5.png',
     physics: {
-      centerX: 230,
+      centerX: STAGE_CENTER_X,
       floorY: 542,
-      innerLeft: 112,
-      innerRight: 348,
-      wallTopY: 188,
+      innerLeft: 114,
+      innerRight: 346,
+      wallTopY: 198,
       mouthY: 72,
-      mouthHalfWidth: 70,
-      neckInset: 14,
-      floorWidth: 248,
-      wallHeight: 200,
-      wallCenterY: 430
+      mouthHalfWidth: 66,
+      neckInset: 12,
+      floorWidth: 246,
+      wallHeight: 188,
+      wallCenterY: 432
     },
     classic: {
       giftsBottom: 82,
@@ -57,17 +59,17 @@ const JAR_CONFIGS = {
     label: 'โถแก้วแมว (jar6)',
     image: '/images/jar6.png',
     physics: {
-      centerX: 215,
+      centerX: STAGE_CENTER_X,
       floorY: 526,
-      innerLeft: 100,
-      innerRight: 342,
-      wallTopY: 206,
+      innerLeft: 108,
+      innerRight: 352,
+      wallTopY: 214,
       mouthY: 84,
-      mouthHalfWidth: 50,
-      neckInset: 26,
-      floorWidth: 256,
-      wallHeight: 224,
-      wallCenterY: 416
+      mouthHalfWidth: 52,
+      neckInset: 22,
+      floorWidth: 268,
+      wallHeight: 208,
+      wallCenterY: 418
     },
     classic: {
       giftsBottom: 92,
