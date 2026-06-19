@@ -267,7 +267,7 @@ function getAvatar(user) {
   return '';
 }
 
-function computeTopLikers(stream, limit = 5) {
+function computeTopLikers(stream, limit = 10) {
   return [...stream.likers.entries()]
     .sort((a, b) => b[1].likes - a[1].likes)
     .slice(0, limit)
