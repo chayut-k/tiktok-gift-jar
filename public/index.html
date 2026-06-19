@@ -347,6 +347,7 @@
     let connectedUsername = '';
     let selectedGiftJar = 1;
     let selectedPhysicsJar = 'jar1';
+    let selectedPhysicsShowCoins = 'show';
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
     let selectedTopLikersNameColor = 'white';
@@ -380,14 +381,23 @@
       { id: 'rainbow', label: 'สีรุ้ง (RGB)' },
     ];
 
+    const COINS_DISPLAY_OPTIONS = [
+      { id: 'show', label: 'แสดงยอดเหรียญรวม' },
+      { id: 'hide', label: 'ซ่อนยอดเหรียญ (เหลือแต่โถ)' },
+    ];
+
     function loadSavedJarPreference() {
       const saved = parseInt(localStorage.getItem('tgj_selected_jar') || '1', 10);
       if (Number.isFinite(saved)) {
         selectedGiftJar = Math.min(6, Math.max(1, saved));
       }
       const savedPhysics = localStorage.getItem('tgj_selected_physics_jar');
+      const savedPhysicsCoins = localStorage.getItem('tgj_physics_show_coins');
       if (savedPhysics && PHYSICS_JAR_OPTIONS.some((jar) => jar.id === savedPhysics)) {
         selectedPhysicsJar = savedPhysics;
+      }
+      if (COINS_DISPLAY_OPTIONS.some((opt) => opt.id === savedPhysicsCoins)) {
+        selectedPhysicsShowCoins = savedPhysicsCoins;
       }
     }
 
@@ -763,20 +773,33 @@
       return buildOverlayUrl('/gift-jar.html', connectedUsername, { jar: jarId });
     }
 
-    function getGiftJarPhysicsUrl(jarId = selectedPhysicsJar) {
-      return buildOverlayUrl('/gift-jar-physics.html', connectedUsername, { jar: jarId });
+    function getGiftJarPhysicsUrl(
+      jarId = selectedPhysicsJar,
+      coins = selectedPhysicsShowCoins
+    ) {
+      return buildOverlayUrl('/gift-jar-physics.html', connectedUsername, { jar: jarId, coins });
     }
 
-    function setPhysicsPreviewFrame(jarId = selectedPhysicsJar) {
+    function setPhysicsPreviewFrame(
+      jarId = selectedPhysicsJar,
+      coins = selectedPhysicsShowCoins
+    ) {
       const frame = document.getElementById('physicsJarPreview');
       if (!frame) return;
       const url = new URL('/gift-jar-physics.html', window.location.origin);
       url.searchParams.set('jar', jarId);
+      url.searchParams.set('coins', coins);
       url.searchParams.set('preview', '1');
       frame.src = 'about:blank';
       setTimeout(() => {
         frame.src = url.toString();
       }, 50);
+    }
+
+    function updatePhysicsJarOverlay() {
+      const link = document.getElementById('giftJarPhysicsLinkText');
+      if (link) link.textContent = getGiftJarPhysicsUrl();
+      setPhysicsPreviewFrame();
     }
 
     function selectPhysicsJar(jarId) {
@@ -792,10 +815,17 @@
       const select = document.getElementById('physicsJarSelect');
       if (select) select.value = jarId;
 
-      const link = document.getElementById('giftJarPhysicsLinkText');
-      if (link) link.textContent = getGiftJarPhysicsUrl(jarId);
+      updatePhysicsJarOverlay();
+    }
 
-      setPhysicsPreviewFrame(jarId);
+    function selectPhysicsCoinsDisplay(coinsId) {
+      selectedPhysicsShowCoins = coinsId;
+      localStorage.setItem('tgj_physics_show_coins', coinsId);
+
+      const select = document.getElementById('physicsCoinsSelect');
+      if (select) select.value = coinsId;
+
+      updatePhysicsJarOverlay();
     }
 
     function updateJarDemoJarImage(jarId) {
@@ -1025,6 +1055,23 @@
       });
       select.addEventListener('change', () => selectPhysicsJar(select.value));
 
+      const coinsLabel = document.createElement('label');
+      coinsLabel.textContent = 'แสดงยอดเหรียญรวม';
+      coinsLabel.setAttribute('for', 'physicsCoinsSelect');
+      coinsLabel.style.marginTop = '8px';
+
+      const coinsSelect = document.createElement('select');
+      coinsSelect.id = 'physicsCoinsSelect';
+      coinsSelect.className = 'jar-select';
+      COINS_DISPLAY_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedPhysicsShowCoins) option.selected = true;
+        coinsSelect.appendChild(option);
+      });
+      coinsSelect.addEventListener('change', () => selectPhysicsCoinsDisplay(coinsSelect.value));
+
       const thumb = document.createElement('img');
       thumb.id = 'physicsJarThumb';
       thumb.src = PHYSICS_JAR_OPTIONS.find((jar) => jar.id === selectedPhysicsJar)?.image || '/images/jar1.png';
@@ -1056,9 +1103,9 @@
       scaler.appendChild(frame);
       previewWrap.appendChild(scaler);
 
-      pickerRow.append(pickerLabel, controls, previewWrap, previewCaption);
+      pickerRow.append(pickerLabel, controls, coinsLabel, coinsSelect, previewWrap, previewCaption);
       item.appendChild(pickerRow);
-      setPhysicsPreviewFrame(selectedPhysicsJar);
+      setPhysicsPreviewFrame(selectedPhysicsJar, selectedPhysicsShowCoins);
       return item;
     }
 

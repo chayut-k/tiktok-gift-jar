@@ -13,3 +13,8 @@ function getOverlayNameColorId() {
   if (color === 'black' || color === 'rainbow') return color;
   return 'white';
 }
+
+function getOverlayCoinsDisplay() {
+  const coins = new URLSearchParams(window.location.search).get('coins');
+  return coins === 'hide' ? 'hide' : 'show';
+}

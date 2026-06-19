@@ -57,6 +57,9 @@
       width: 30px;
       height: 30px;
     }
+    body[data-coins="hide"] .coin-counter {
+      display: none;
+    }
     .label {
       text-align: center;
       color: #ffd700;
@@ -77,7 +80,7 @@
   <div class="stage" id="stage">
     <img class="jar-img" id="jar-img" src="/images/jar1.png" alt="โถแก้ว">
     <div class="physics-layer" id="physics-layer"></div>
-    <div class="coin-counter">
+    <div class="coin-counter" id="coin-counter">
       <img src="/images/coin.png" alt="coin">
       <span id="total">0</span>
     </div>
@@ -93,6 +96,7 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
+    document.body.dataset.coins = getOverlayCoinsDisplay();
     const { jarId, jarConfig } = applyJarImage('jar-img');
     const JAR = jarConfig.physics;
 
