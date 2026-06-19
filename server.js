@@ -462,8 +462,32 @@ function attachTikTokListeners(conn, email, connectionId) {
         || 0;
       if (diamonds <= 0) return;
 
+      const giftType = data.giftType
+        ?? (data.extendedGiftInfo && data.extendedGiftInfo.gift_type)
+        ?? (data.giftDetails && data.giftDetails.giftType)
+        ?? 1;
       const repeatEnd = data.repeatEnd === true || data.repeatEnd === 1;
-      if (!repeatEnd) return;
+
+      const giftPictureUrl = data.giftPictureUrl
+        || (data.extendedGiftInfo && data.extendedGiftInfo.image && data.extendedGiftInfo.image.url_list && data.extendedGiftInfo.image.url_list[0])
+        || (data.giftDetails && data.giftDetails.icon && data.giftDetails.icon.urlList && data.giftDetails.icon.urlList[0])
+        || null;
+
+      const userLabel = data.user?.nickname || data.user?.uniqueId || 'คนดู';
+      const giftName = data.giftName || (data.giftDetails && data.giftDetails.giftName) || 'Unknown';
+
+      // giftType 1 = streak (Rose ฯลฯ) แสดงทีละชิ้นระหว่าง combo | ของราคาสูงมักเป็น non-streak ส่งครั้งเดียว repeatEnd=false
+      if (giftType === 1 && !repeatEnd) {
+        emitToStream(stream.tiktokUsername, 'gift', {
+          user: userLabel,
+          giftName,
+          diamonds,
+          repeatCount: 1,
+          total: stream.totalDiamonds,
+          giftPictureUrl,
+        });
+        return;
+      }
 
       const repeatCount = data.repeatCount || 1;
       const giftValue = diamonds * repeatCount;
@@ -481,14 +505,9 @@ function attachTikTokListeners(conn, email, connectionId) {
         emitToStream(stream.tiktokUsername, 'topGifters', computeTopGifters(stream));
       }
 
-      const giftPictureUrl = data.giftPictureUrl
-        || (data.extendedGiftInfo && data.extendedGiftInfo.image && data.extendedGiftInfo.image.url_list && data.extendedGiftInfo.image.url_list[0])
-        || (data.giftDetails && data.giftDetails.icon && data.giftDetails.icon.urlList && data.giftDetails.icon.urlList[0])
-        || null;
-
       emitToStream(stream.tiktokUsername, 'gift', {
-        user: data.user?.nickname || data.user?.uniqueId || 'คนดู',
-        giftName: data.giftName || (data.giftDetails && data.giftDetails.giftName) || 'Unknown',
+        user: userLabel,
+        giftName,
         diamonds,
         repeatCount,
         total: stream.totalDiamonds,
