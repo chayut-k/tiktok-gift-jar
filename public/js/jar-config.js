@@ -28,6 +28,33 @@ const JAR_CONFIGS = {
       coinBottom: 45
     }
   },
+  jar4: {
+    label: 'โถแก้วมังกรทอง (jar4)',
+    image: '/images/jar4.png',
+    physics: {
+      centerX: STAGE_CENTER_X,
+      floorY: 536,
+      innerLeft: 86,
+      innerRight: 374,
+      wallTopY: 204,
+      mouthY: 76,
+      mouthHalfWidth: 64,
+      neckInset: 10,
+      floorWidth: 300,
+      wallHeight: 216,
+      wallCenterY: 426
+    },
+    classic: {
+      giftsBottom: 90,
+      giftsLeft: 76,
+      giftsWidth: '70%',
+      giftsHeight: 248,
+      liquidBottom: 84,
+      liquidLeft: 82,
+      liquidWidth: '66%',
+      coinBottom: 42
+    }
+  },
   jar5: {
     label: 'โถแก้วกลม (jar5)',
     image: '/images/jar5.png',
@@ -86,7 +113,7 @@ const JAR_CONFIGS = {
 
 const DEFAULT_JAR = 'jar1';
 
-const NUMERIC_JAR_MAP = { 1: 'jar1', 5: 'jar5', 6: 'jar6' };
+const NUMERIC_JAR_MAP = { 1: 'jar1', 4: 'jar4', 5: 'jar5', 6: 'jar6' };
 
 function getJarFromQuery() {
   const jar = new URLSearchParams(window.location.search).get('jar');
