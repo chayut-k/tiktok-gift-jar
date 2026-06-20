@@ -157,6 +157,27 @@
       cursor: pointer;
     }
     .jar-select:focus { outline: none; border-color: #ff0050; }
+    .tlj-setting-row {
+      margin: 10px 0 4px;
+    }
+    .tlj-setting-row .tlj-row-label {
+      display: block;
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: #888;
+    }
+    .tlj-inline-pickers {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .tlj-inline-pickers .jar-select {
+      flex: 1;
+      margin: 0;
+      min-width: 0;
+      font-size: 14px;
+      padding: 9px 10px;
+    }
     .jar-preview-inline {
       background: #111;
       border: 1px solid #333;
@@ -183,7 +204,6 @@
       height: 100%;
       background: no-repeat center center;
       background-size: contain;
-      filter: drop-shadow(0 8px 14px rgba(0,0,0,0.45));
     }
     .jar-demo-gifts {
       position: absolute;
@@ -351,6 +371,9 @@
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
     let selectedTopLikersNameColor = 'white';
+    let selectedTopLikersNameSize = 'md';
+    let selectedTopLikersLikesColor = 'white';
+    let selectedTopLikersLikesSize = 'md';
     let selectedTopGiftersBg = 'transparent';
     let jarDemoTimer = null;
     let heartsDemoTimer = null;
@@ -382,6 +405,18 @@
       { id: 'rainbow', label: 'สีรุ้ง (RGB)' },
     ];
 
+    const LIKES_COLOR_OPTIONS = [
+      { id: 'white', label: 'สีขาว' },
+      { id: 'black', label: 'สีดำ' },
+      { id: 'red', label: 'สีแดง' },
+    ];
+
+    const FONT_SIZE_OPTIONS = [
+      { id: 'sm', label: 'เล็ก (14px)', px: 14 },
+      { id: 'md', label: 'กลาง (16px)', px: 16 },
+      { id: 'lg', label: 'ใหญ่ (18px)', px: 18 },
+    ];
+
     const COINS_DISPLAY_OPTIONS = [
       { id: 'show', label: 'แสดงยอดเหรียญรวม' },
       { id: 'hide', label: 'ซ่อนยอดเหรียญ (เหลือแต่โถ)' },
@@ -406,11 +441,23 @@
       const chatBg = localStorage.getItem('tgj_chat_bg');
       const topBg = localStorage.getItem('tgj_toplikers_bg');
       const topNameColor = localStorage.getItem('tgj_toplikers_name_color');
+      const topLikesColor = localStorage.getItem('tgj_toplikers_likes_color');
+      const topNameSize = localStorage.getItem('tgj_toplikers_name_size');
+      const topLikesSize = localStorage.getItem('tgj_toplikers_likes_size');
       const giftersBg = localStorage.getItem('tgj_topgifters_bg');
       if (chatBg === 'transparent' || chatBg === 'dim') selectedChatBg = chatBg;
       if (topBg === 'transparent' || topBg === 'dim') selectedTopLikersBg = topBg;
       if (NAME_COLOR_OPTIONS.some((opt) => opt.id === topNameColor)) {
         selectedTopLikersNameColor = topNameColor;
+      }
+      if (LIKES_COLOR_OPTIONS.some((opt) => opt.id === topLikesColor)) {
+        selectedTopLikersLikesColor = topLikesColor;
+      }
+      if (FONT_SIZE_OPTIONS.some((opt) => opt.id === topNameSize)) {
+        selectedTopLikersNameSize = topNameSize;
+      }
+      if (FONT_SIZE_OPTIONS.some((opt) => opt.id === topLikesSize)) {
+        selectedTopLikersLikesSize = topLikesSize;
       }
       if (giftersBg === 'transparent' || giftersBg === 'dim') selectedTopGiftersBg = giftersBg;
     }
@@ -427,11 +474,78 @@
       return '#ffffff';
     }
 
-    function renderTopLikersPreview(bgId, nameColorId) {
+    function getLikesColorCss(likesColorId) {
+      if (likesColorId === 'black') return '#111111';
+      if (likesColorId === 'red') return '#ff2d55';
+      return '#ffffff';
+    }
+
+    function getFontSizePx(sizeId) {
+      const option = FONT_SIZE_OPTIONS.find((opt) => opt.id === sizeId);
+      return option ? option.px : 16;
+    }
+
+    function createTopLikersStyleSelect(id, options, selectedId, onChange) {
+      const select = document.createElement('select');
+      select.id = id;
+      select.className = 'jar-select';
+      options.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedId) option.selected = true;
+        select.appendChild(option);
+      });
+      select.addEventListener('change', () => onChange(select.value));
+      return select;
+    }
+
+    function createTopLikersSettingRow(labelText, colorSelectId, sizeSelectId, colorValue, sizeValue, onColorChange, onSizeChange) {
+      const row = document.createElement('div');
+      row.className = 'tlj-setting-row';
+
+      const label = document.createElement('label');
+      label.className = 'tlj-row-label';
+      label.textContent = labelText;
+
+      const pickers = document.createElement('div');
+      pickers.className = 'tlj-inline-pickers';
+      pickers.append(
+        createTopLikersStyleSelect(colorSelectId, NAME_COLOR_OPTIONS, colorValue, onColorChange),
+        createTopLikersStyleSelect(sizeSelectId, FONT_SIZE_OPTIONS, sizeValue, onSizeChange)
+      );
+
+      row.append(label, pickers);
+      return row;
+    }
+
+    function createTopLikersLikesSettingRow(labelText, colorSelectId, sizeSelectId, colorValue, sizeValue, onColorChange, onSizeChange) {
+      const row = document.createElement('div');
+      row.className = 'tlj-setting-row';
+
+      const label = document.createElement('label');
+      label.className = 'tlj-row-label';
+      label.textContent = labelText;
+
+      const pickers = document.createElement('div');
+      pickers.className = 'tlj-inline-pickers';
+      pickers.append(
+        createTopLikersStyleSelect(colorSelectId, LIKES_COLOR_OPTIONS, colorValue, onColorChange),
+        createTopLikersStyleSelect(sizeSelectId, FONT_SIZE_OPTIONS, sizeValue, onSizeChange)
+      );
+
+      row.append(label, pickers);
+      return row;
+    }
+
+    function renderTopLikersPreview(bgId, nameColorId, likesColorId, nameSizeId, likesSizeId) {
       const bg = getBgCss(bgId);
+      const namePx = getFontSizePx(nameSizeId);
+      const likesPx = getFontSizePx(likesSizeId);
       const nameStyle = nameColorId === 'rainbow'
-        ? 'background:linear-gradient(90deg,#ff0000,#ff8800,#ffff00,#00ff00,#0088ff,#8800ff);-webkit-background-clip:text;background-clip:text;color:transparent;'
-        : `color:${getNameColorCss(nameColorId)};`;
+        ? `font-size:${namePx}px;background:linear-gradient(90deg,#ff0000,#ff8800,#ffff00,#00ff00,#0088ff,#8800ff);-webkit-background-clip:text;background-clip:text;color:transparent;`
+        : `font-size:${namePx}px;color:${getNameColorCss(nameColorId)};`;
+      const likesStyle = `font-size:${likesPx}px;color:${getLikesColorCss(likesColorId)};`;
       const rows = [
         { rank: '🥇', avatarBorder: '2px solid #ffd700', name: 'อันดับ 1' },
         { rank: '4.', avatarBorder: 'none', name: 'อันดับ 4' },
@@ -443,8 +557,8 @@
               <span style="font-size:18px;width:28px;text-align:center;">${row.rank}</span>
               <div style="width:34px;height:34px;border-radius:50%;background:#555;flex-shrink:0;border:${row.avatarBorder};"></div>
               <div style="text-align:left;min-width:0;">
-                <div style="font-weight:600;font-size:14px;${nameStyle}white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${row.name}</div>
-                <div style="color:#ff4d6d;font-size:13px;">❤️ 1,234</div>
+                <div style="font-weight:600;${nameStyle}white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${row.name}</div>
+                <div style="font-weight:500;${likesStyle}">❤️ 1,234</div>
               </div>
             </div>
           `).join('')}
@@ -1269,14 +1383,28 @@
       });
     }
 
-    function getTopLikersUrl(bg = selectedTopLikersBg, nameColor = selectedTopLikersNameColor) {
-      return buildOverlayUrl('/top-likers.html', connectedUsername, { bg, nameColor });
+    function getTopLikersUrl(
+      bg = selectedTopLikersBg,
+      nameColor = selectedTopLikersNameColor,
+      likesColor = selectedTopLikersLikesColor,
+      nameSize = selectedTopLikersNameSize,
+      likesSize = selectedTopLikersLikesSize
+    ) {
+      return buildOverlayUrl('/top-likers.html', connectedUsername, {
+        bg, nameColor, likesColor, nameSize, likesSize
+      });
     }
 
     function updateTopLikersPreview() {
       const preview = document.getElementById('topLikersBgPreview');
       if (preview) {
-        preview.innerHTML = renderTopLikersPreview(selectedTopLikersBg, selectedTopLikersNameColor);
+        preview.innerHTML = renderTopLikersPreview(
+          selectedTopLikersBg,
+          selectedTopLikersNameColor,
+          selectedTopLikersLikesColor,
+          selectedTopLikersNameSize,
+          selectedTopLikersLikesSize
+        );
       }
       const link = document.getElementById('topLikersLinkText');
       if (link) link.textContent = getTopLikersUrl();
@@ -1343,33 +1471,54 @@
         updateTopLikersPreview();
       });
 
-      const nameLabel = document.createElement('label');
-      nameLabel.textContent = 'เลือกสีชื่อผู้เคาะใจ';
-      nameLabel.setAttribute('for', 'topLikersNameColorSelect');
-      nameLabel.style.marginTop = '8px';
+      const nameRow = createTopLikersSettingRow(
+        'ชื่อผู้เคาะใจ',
+        'topLikersNameColorSelect',
+        'topLikersNameSizeSelect',
+        selectedTopLikersNameColor,
+        selectedTopLikersNameSize,
+        (value) => {
+          selectedTopLikersNameColor = value;
+          localStorage.setItem('tgj_toplikers_name_color', value);
+          updateTopLikersPreview();
+        },
+        (value) => {
+          selectedTopLikersNameSize = value;
+          localStorage.setItem('tgj_toplikers_name_size', value);
+          updateTopLikersPreview();
+        }
+      );
 
-      const nameSelect = document.createElement('select');
-      nameSelect.id = 'topLikersNameColorSelect';
-      nameSelect.className = 'jar-select';
-      NAME_COLOR_OPTIONS.forEach((opt) => {
-        const option = document.createElement('option');
-        option.value = opt.id;
-        option.textContent = opt.label;
-        if (opt.id === selectedTopLikersNameColor) option.selected = true;
-        nameSelect.appendChild(option);
-      });
-      nameSelect.addEventListener('change', () => {
-        selectedTopLikersNameColor = nameSelect.value;
-        localStorage.setItem('tgj_toplikers_name_color', selectedTopLikersNameColor);
-        updateTopLikersPreview();
-      });
+      const likesRow = createTopLikersLikesSettingRow(
+        'จำนวนหัวใจ',
+        'topLikersLikesColorSelect',
+        'topLikersLikesSizeSelect',
+        selectedTopLikersLikesColor,
+        selectedTopLikersLikesSize,
+        (value) => {
+          selectedTopLikersLikesColor = value;
+          localStorage.setItem('tgj_toplikers_likes_color', value);
+          updateTopLikersPreview();
+        },
+        (value) => {
+          selectedTopLikersLikesSize = value;
+          localStorage.setItem('tgj_toplikers_likes_size', value);
+          updateTopLikersPreview();
+        }
+      );
 
       const previewWrap = document.createElement('div');
       previewWrap.className = 'bg-preview-inline';
       previewWrap.id = 'topLikersBgPreview';
-      previewWrap.innerHTML = renderTopLikersPreview(selectedTopLikersBg, selectedTopLikersNameColor);
+      previewWrap.innerHTML = renderTopLikersPreview(
+        selectedTopLikersBg,
+        selectedTopLikersNameColor,
+        selectedTopLikersLikesColor,
+        selectedTopLikersNameSize,
+        selectedTopLikersLikesSize
+      );
 
-      pickerRow.append(bgLabel, bgSelect, nameLabel, nameSelect, previewWrap);
+      pickerRow.append(bgLabel, bgSelect, nameRow, likesRow, previewWrap);
       item.appendChild(pickerRow);
       return item;
     }

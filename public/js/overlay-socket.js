@@ -14,6 +14,26 @@ function getOverlayNameColorId() {
   return 'white';
 }
 
+function getOverlayLikesColorId() {
+  const color = new URLSearchParams(window.location.search).get('likesColor');
+  if (color === 'black' || color === 'red') return color;
+  return 'white';
+}
+
+function getOverlayFontSizeId(param, fallback = 'md') {
+  const size = new URLSearchParams(window.location.search).get(param);
+  if (size === 'sm' || size === 'lg') return size;
+  return fallback;
+}
+
+function getOverlayNameSizeId() {
+  return getOverlayFontSizeId('nameSize');
+}
+
+function getOverlayLikesSizeId() {
+  return getOverlayFontSizeId('likesSize');
+}
+
 function getOverlayCoinsDisplay() {
   const coins = new URLSearchParams(window.location.search).get('coins');
   return coins === 'hide' ? 'hide' : 'show';

@@ -20,8 +20,8 @@ function giftPixelSize(diamonds, baseSize = 39) {
 
 function giftPhysicsRadius(diamonds) {
   const capped = normalizeGiftDiamonds(diamonds);
-  const minR = 12;
-  const maxR = 38;
+  const minR = 10;
+  const maxR = 48;
   const t = Math.sqrt((capped - 1) / (GIFT_DIAMOND_CAP - 1));
   return minR + t * (maxR - minR);
 }

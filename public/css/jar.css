@@ -13,7 +13,6 @@
       background-size: contain;
       position: relative; 
       overflow: hidden;
-      filter: drop-shadow(0 25px 35px rgba(0,0,0,0.6));
     }
     .gifts-container {
       position: absolute;
