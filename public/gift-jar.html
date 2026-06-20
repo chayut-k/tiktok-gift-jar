@@ -88,6 +88,7 @@
   
   <div class="label" id="last-gift">รอของขวัญ...</div>
 
+  <script src="/js/gift-size.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/overlay-socket.js"></script>
   <script>
@@ -103,7 +104,7 @@
     let total = 0;
     const maxGoal = 50000;
     let giftCount = 0;
-    const MAX_GIFTS = 40;   // จำนวนสูงสุดก่อนเริ่มกองใหม่
+    const MAX_VISIBLE_GIFTS = 100;
 
     const giftsContainer = document.getElementById('gifts');
     const lastGiftLabel = document.getElementById('last-gift');
@@ -114,13 +115,7 @@
       gift.src = giftPictureUrl || 'images/coin.png';
       gift.onerror = () => { gift.src = 'images/coin.png'; };
       
-      let baseSize = 38;
-      // let scale = diamonds >= 1000 ? 2.45 : 
-      //            diamonds >= 500 ? 2.2 : 
-      //            diamonds >= 100 ? 1.85 : Math.min(2.1, 0.85 + (diamonds / 55));
-      let scale = Math.min(2.1, 0.85 + (diamonds / 55));
-      
-      const size = Math.floor(baseSize * scale);
+      const size = giftPixelSize(diamonds, 38);
       gift.style.width = size + 'px';
       gift.style.height = size + 'px';
 
@@ -129,6 +124,10 @@
       gift.style.transform = `rotate(${Math.random() * 55 - 25}deg)`;
 
       giftsContainer.appendChild(gift);
+
+      while (giftsContainer.children.length > MAX_VISIBLE_GIFTS) {
+        giftsContainer.removeChild(giftsContainer.firstChild);
+      }
 
       setTimeout(() => {
         gift.classList.remove('gift-fall');
@@ -142,14 +141,6 @@
         gift.style.zIndex = 100 + giftCount;
 
         giftCount++;
-
-        // เมื่อถึงจำนวนสูงสุด → ล้างแล้วเริ่มกองใหม่จากล่าง
-        if (giftCount >= MAX_GIFTS) {
-          setTimeout(() => {
-            //giftsContainer.innerHTML = '';
-            giftCount = 0;
-          }, 600);
-        }
       }, 2650);
     }
 

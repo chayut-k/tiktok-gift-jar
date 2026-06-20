@@ -5,6 +5,7 @@
   <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
   <title>Gift Jar Physics</title>
   <script src="/js/jar-config.js"></script>
+  <script src="/js/gift-size.js"></script>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -112,6 +113,8 @@
     let total = 0;
     let giftCount = 0;
     const imageCache = new Map();
+    const MAX_DYNAMIC_GIFTS = 28;
+    const GIFT_LABELS = ['gift', 'gift-static'];
 
     function initPhysics() {
       if (typeof Matter === 'undefined') {
@@ -183,12 +186,38 @@
 
       World.add(engine.world, [...buildJarWalls(), ...buildSpillSurfaces()]);
 
+      function getGiftBodies() {
+        return Composite.allBodies(engine.world).filter((b) => GIFT_LABELS.includes(b.label));
+      }
+
       function giftRadius(diamonds) {
-        const scale = diamonds >= 1000 ? 2.55 :
-          diamonds >= 500 ? 2.2 :
-          diamonds >= 100 ? 1.85 :
-          Math.min(2.1, 0.85 + (diamonds / 55));
-        return Math.max(11, Math.min(26, Math.floor(15.5 * scale) / 2));
+        return giftPhysicsRadius(diamonds);
+      }
+
+      function freezeGift(body) {
+        if (!body || body.isStatic || body.frozen) return;
+        Body.setStatic(body, true);
+        Body.setVelocity(body, { x: 0, y: 0 });
+        Body.setAngularVelocity(body, 0);
+        body.label = 'gift-static';
+        body.frozen = true;
+      }
+
+      function enforceDynamicLimit() {
+        const dynamic = getGiftBodies().filter((b) => b.label === 'gift');
+        if (dynamic.length <= MAX_DYNAMIC_GIFTS) return;
+        dynamic.sort((a, b) => (a.spawnTime || 0) - (b.spawnTime || 0));
+        const excess = dynamic.length - MAX_DYNAMIC_GIFTS;
+        for (let i = 0; i < excess; i++) {
+          freezeGift(dynamic[i]);
+        }
+      }
+
+      function updateRenderQuality() {
+        const count = getGiftBodies().length;
+        render.options.pixelRatio = count > 45
+          ? 1
+          : Math.min(window.devicePixelRatio || 1, 2);
       }
 
       function loadGiftImage(url) {
@@ -240,33 +269,45 @@
         });
 
         giftCount++;
+        enforceDynamicLimit();
       }
 
       function removeFallenGifts() {
-        const gifts = Composite.allBodies(engine.world).filter(b => b.label === 'gift');
-        const fallen = gifts.filter(b => b.position.y > FALLEN_Y);
+        const gifts = getGiftBodies();
+        const fallen = gifts.filter((b) => b.position.y > FALLEN_Y);
         if (fallen.length) World.remove(engine.world, fallen);
       }
 
+      function settleIdleGifts() {
+        const now = Date.now();
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (body.speed < 0.12 && now - (body.spawnTime || 0) > 2200) {
+            freezeGift(body);
+          }
+        });
+      }
+
       function resetJar() {
-        const gifts = Composite.allBodies(engine.world).filter(b => b.label === 'gift');
+        const gifts = getGiftBodies();
         World.remove(engine.world, gifts);
         giftCount = 0;
+        updateRenderQuality();
       }
 
       Events.on(render, 'afterRender', () => {
         const ctx = render.context;
-        const gifts = Composite.allBodies(engine.world).filter(b => b.label === 'gift');
+        const gifts = getGiftBodies();
 
         for (const body of gifts) {
           const img = body.giftImage;
           const r = body.circleRadius;
           const pos = body.position;
-          const angle = body.angle;
+          const angle = body.isStatic ? 0 : body.angle;
 
           ctx.save();
           ctx.translate(pos.x, pos.y);
-          ctx.rotate(angle);
+          if (!body.isStatic) ctx.rotate(angle);
 
           if (img && img.complete && img.naturalWidth > 0) {
             ctx.drawImage(img, -r, -r, r * 2, r * 2);
@@ -279,10 +320,19 @@
 
           ctx.restore();
         }
+
+        updateRenderQuality();
+      });
+
+      Events.on(engine, 'sleepStart', (event) => {
+        if (event.body && event.body.label === 'gift') {
+          freezeGift(event.body);
+        }
       });
 
       Events.on(engine, 'beforeUpdate', () => {
         removeFallenGifts();
+        settleIdleGifts();
       });
 
       if (!isPreview) {
