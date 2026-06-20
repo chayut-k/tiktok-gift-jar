@@ -14,14 +14,14 @@ function giftScaleFactor(diamonds) {
   return minScale + t * (maxScale - minScale);
 }
 
-function giftPixelSize(diamonds, baseSize = 38) {
+function giftPixelSize(diamonds, baseSize = 39) {
   return Math.round(baseSize * giftScaleFactor(diamonds));
 }
 
 function giftPhysicsRadius(diamonds) {
   const capped = normalizeGiftDiamonds(diamonds);
-  const minR = 10;
-  const maxR = 34;
+  const minR = 12;
+  const maxR = 38;
   const t = Math.sqrt((capped - 1) / (GIFT_DIAMOND_CAP - 1));
   return minR + t * (maxR - minR);
 }
