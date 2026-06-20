@@ -476,13 +476,41 @@ function attachTikTokListeners(conn, email, connectionId) {
       const userLabel = data.user?.nickname || data.user?.uniqueId || 'คนดู';
       const giftName = data.giftName || (data.giftDetails && data.giftDetails.giftName) || 'Unknown';
 
-      // giftType 1 = streak (Rose ฯลฯ) แสดงทีละชิ้นระหว่าง combo | ของราคาสูงมักเป็น non-streak ส่งครั้งเดียว repeatEnd=false
+      // giftType 1 = streak (Rose ฯลฯ) แสดงทีละชิ้นระหว่าง combo | จบ combo อัปเดตยอดอย่างเดียว ไม่สร้างของซ้ำ
       if (giftType === 1 && !repeatEnd) {
         emitToStream(stream.tiktokUsername, 'gift', {
           user: userLabel,
           giftName,
           diamonds,
           repeatCount: 1,
+          total: stream.totalDiamonds,
+          giftPictureUrl,
+        });
+        return;
+      }
+
+      if (giftType === 1 && repeatEnd) {
+        const repeatCount = data.repeatCount || 1;
+        const giftValue = diamonds * repeatCount;
+        stream.totalDiamonds += giftValue;
+
+        const uid = data.user?.uniqueId || data.uniqueId;
+        if (uid) {
+          const existing = stream.gifters.get(uid) || {
+            nickname: data.user?.nickname || uid,
+            diamonds: 0,
+            avatar: getAvatar(data.user),
+          };
+          existing.diamonds += giftValue;
+          stream.gifters.set(uid, existing);
+          emitToStream(stream.tiktokUsername, 'topGifters', computeTopGifters(stream));
+        }
+
+        emitToStream(stream.tiktokUsername, 'gift', {
+          user: userLabel,
+          giftName,
+          diamonds,
+          repeatCount: 0,
           total: stream.totalDiamonds,
           giftPictureUrl,
         });

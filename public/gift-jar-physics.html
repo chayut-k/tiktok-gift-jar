@@ -345,7 +345,10 @@
           document.getElementById('last-gift').textContent =
             `${data.user} ส่ง ${data.giftName}`;
 
-          const count = Math.min(data.repeatCount || 1, 5);
+          const repeatCount = Number(data.repeatCount) || 0;
+          if (repeatCount <= 0) return;
+
+          const count = Math.min(repeatCount, 5);
           for (let i = 0; i < count; i++) {
             setTimeout(() => createGift(data), i * 180);
           }
