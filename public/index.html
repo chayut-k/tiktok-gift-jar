@@ -368,6 +368,7 @@
     let selectedGiftJar = 1;
     let selectedPhysicsJar = 'jar1';
     let selectedPhysicsShowCoins = 'show';
+    let selectedPintoShowCoins = 'show';
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
     let selectedTopLikersNameColor = 'white';
@@ -429,11 +430,15 @@
       }
       const savedPhysics = localStorage.getItem('tgj_selected_physics_jar');
       const savedPhysicsCoins = localStorage.getItem('tgj_physics_show_coins');
+      const savedPintoCoins = localStorage.getItem('tgj_pinto_show_coins');
       if (savedPhysics && PHYSICS_JAR_OPTIONS.some((jar) => jar.id === savedPhysics)) {
         selectedPhysicsJar = savedPhysics;
       }
       if (COINS_DISPLAY_OPTIONS.some((opt) => opt.id === savedPhysicsCoins)) {
         selectedPhysicsShowCoins = savedPhysicsCoins;
+      }
+      if (COINS_DISPLAY_OPTIONS.some((opt) => opt.id === savedPintoCoins)) {
+        selectedPintoShowCoins = savedPintoCoins;
       }
     }
 
@@ -1106,6 +1111,120 @@
       return item;
     }
 
+    function getGiftPintoPhysicsUrl(coins = selectedPintoShowCoins) {
+      return buildOverlayUrl('/gift-pinto-physics.html', connectedUsername, { coins });
+    }
+
+    function setPintoPreviewFrame(coins = selectedPintoShowCoins) {
+      const frame = document.getElementById('pintoPhysicsPreview');
+      if (!frame) return;
+      const url = new URL('/gift-pinto-physics.html', window.location.origin);
+      url.searchParams.set('coins', coins);
+      url.searchParams.set('preview', '1');
+      frame.src = 'about:blank';
+      setTimeout(() => {
+        frame.src = url.toString();
+      }, 50);
+    }
+
+    function updatePintoPhysicsOverlay() {
+      const link = document.getElementById('giftPintoPhysicsLinkText');
+      if (link) link.textContent = getGiftPintoPhysicsUrl();
+      setPintoPreviewFrame();
+    }
+
+    function selectPintoCoinsDisplay(coinsId) {
+      selectedPintoShowCoins = coinsId;
+      localStorage.setItem('tgj_pinto_show_coins', coinsId);
+      updatePintoPhysicsOverlay();
+    }
+
+    function createGiftPintoPhysicsOverlayItem() {
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+      item.style.flexDirection = 'column';
+      item.style.alignItems = 'stretch';
+
+      const top = document.createElement('div');
+      top.style.display = 'flex';
+      top.style.justifyContent = 'space-between';
+      top.style.alignItems = 'flex-start';
+      top.style.gap = '8px';
+
+      const info = document.createElement('div');
+      info.style.flex = '1';
+      info.innerHTML = `
+        <strong>🍱 Gift Pinto (ฟิสิกส์ 4 ชั้น)</strong><br>
+        <span id="giftPintoPhysicsLinkText">${getGiftPintoPhysicsUrl()}</span>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'overlay-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'small-btn';
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => copyToClipboard(getGiftPintoPhysicsUrl(), copyBtn));
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'small-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => window.open(getGiftPintoPhysicsUrl(), '_blank'));
+
+      actions.append(copyBtn, openBtn);
+      top.append(info, actions);
+      item.appendChild(top);
+
+      const pickerRow = document.createElement('div');
+      pickerRow.className = 'jar-picker-row';
+
+      const help = document.createElement('p');
+      help.className = 'help';
+      help.style.marginTop = '0';
+      help.textContent = 'เริ่มแสดงชั้นล่าง → ขยับชั้นเมื่อใกล้เต็ม → ชั้นบนเต็มแล้วของขวัญล้นออกข้าง';
+
+      const coinsLabel = document.createElement('label');
+      coinsLabel.textContent = 'แสดงยอดเหรียญรวม';
+      coinsLabel.setAttribute('for', 'pintoCoinsSelect');
+
+      const coinsSelect = document.createElement('select');
+      coinsSelect.id = 'pintoCoinsSelect';
+      coinsSelect.className = 'jar-select';
+      COINS_DISPLAY_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedPintoShowCoins) option.selected = true;
+        coinsSelect.appendChild(option);
+      });
+      coinsSelect.addEventListener('change', () => selectPintoCoinsDisplay(coinsSelect.value));
+
+      const previewCaption = document.createElement('p');
+      previewCaption.className = 'preview-caption';
+      previewCaption.textContent = 'ตัวอย่างปิ่นโต 4 ชั้น (G=1 H=20 J=100 เหรียญ | R=รีเซ็ต)';
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'physics-preview-wrap';
+
+      const scaler = document.createElement('div');
+      scaler.className = 'physics-preview-scaler';
+
+      const frame = document.createElement('iframe');
+      frame.id = 'pintoPhysicsPreview';
+      frame.className = 'physics-preview-frame';
+      frame.title = 'ตัวอย่างปิ่นโตฟิสิกส์';
+
+      scaler.appendChild(frame);
+      previewWrap.appendChild(scaler);
+
+      pickerRow.append(help, coinsLabel, coinsSelect, previewWrap, previewCaption);
+      item.appendChild(pickerRow);
+      setPintoPreviewFrame(selectedPintoShowCoins);
+      return item;
+    }
+
     function createGiftJarPhysicsOverlayItem() {
       const item = document.createElement('div');
       item.className = 'overlay-item';
@@ -1568,6 +1687,7 @@
 
       urlsDiv.replaceChildren();
       urlsDiv.appendChild(createGiftJarPhysicsOverlayItem());
+      urlsDiv.appendChild(createGiftPintoPhysicsOverlayItem());
       urlsDiv.appendChild(createGiftJarOverlayItem());
       urlsDiv.appendChild(createChatOverlayItem());
       urlsDiv.appendChild(createTopLikersOverlayItem());

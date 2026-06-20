@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
-  <title>Gift Jar Physics</title>
-  <script src="/js/jar-config.js"></script>
+  <title>Gift Pinto Physics</title>
+  <script src="/js/pinto-config.js"></script>
   <script src="/js/gift-size.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -22,24 +22,40 @@
       height: 620px;
       margin: 20px auto;
     }
-    .jar-img {
+    .pinto-clip {
       position: absolute;
       inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+      overflow: hidden;
+      z-index: 2;
       pointer-events: none;
-      z-index: 1;
+    }
+    .pinto-img {
+      position: absolute;
+      bottom: 0;
+      object-fit: fill;
+      pointer-events: none;
     }
     .physics-layer {
       position: absolute;
       inset: 0;
-      z-index: 3;
+      z-index: 4;
+      pointer-events: none;
+    }
+    .tier-badge {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.72);
+      color: #ffd700;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 14px;
+      z-index: 12;
       pointer-events: none;
     }
     .coin-counter {
       position: absolute;
-      bottom: 35px;
+      bottom: 18px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(0, 0, 0, 0.85);
@@ -78,8 +94,11 @@
 </head>
 <body>
   <div class="stage" id="stage">
-    <img class="jar-img" id="jar-img" src="/images/jar1.png" alt="โถแก้ว">
+    <div class="pinto-clip" id="pinto-clip">
+      <img class="pinto-img" id="pinto-img" src="/images/ปิ่นโต2.png" alt="ปิ่นโต">
+    </div>
     <div class="physics-layer" id="physics-layer"></div>
+    <div class="tier-badge" id="tier-badge">ชั้น 1 / 4</div>
     <div class="coin-counter" id="coin-counter">
       <img src="/images/coin.png" alt="coin">
       <span id="total">0</span>
@@ -96,21 +115,33 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
+    const showTierGuides = isPreview || params.get('debug') === '1';
     document.body.dataset.coins = getOverlayCoinsDisplay();
-    const { jarId, jarConfig } = applyJarImage('jar-img');
-    const JAR = jarConfig.physics;
+    const { pintoConfig } = applyPintoImage('pinto-img');
+    const PINTO = pintoConfig;
+    const TIERS = PINTO.tiers;
+    const TEST_GIFT_SIZES = { g: 1, h: 20, j: 100 };
+
+    function applyPintoLayoutStyles() {
+      const img = document.getElementById('pinto-img');
+      const layout = PINTO.layout;
+      img.style.left = `${layout.offsetX}px`;
+      img.style.bottom = '0';
+      img.style.top = 'auto';
+      img.style.width = `${layout.displayW}px`;
+      img.style.height = `${layout.displayH}px`;
+    }
 
     if (isPreview) {
       document.body.classList.add('preview-mode');
     }
+    applyPintoLayoutStyles();
 
     const STAGE_W = 460;
     const STAGE_H = 620;
     const FALLBACK_TEXTURE = '/images/rose.png';
     const FALLEN_Y = STAGE_H + 120;
-    const SETTLE_MIN_Y = JAR.wallTopY + 72;
-    const NECK_NUDGE_Y = JAR.wallTopY + 48;
-    const SPILL_FLOOR_Y = JAR.floorY + 16;
+    const SPILL_FLOOR_Y = PINTO.spillFloorY;
     const SETTLE_IDLE_MS_INSIDE = 6000;
     const SETTLE_IDLE_MS_SPILL = 9000;
     const SETTLE_SPEED_INSIDE = 0.041;
@@ -118,10 +149,14 @@
 
     let total = 0;
     let giftCount = 0;
+    let visibleTiers = 1;
+    let overflowMode = false;
+    const tierUnlockAt = [false, false, false, false];
+    let structureBodies = [];
     const imageCache = new Map();
     const MAX_DYNAMIC_GIFTS = 35;
     const GIFT_LABELS = ['gift', 'gift-static'];
-    const TEST_GIFT_SIZES = { g: 1, h: 20, j: 100 };
+    const STRUCTURE_LABELS = ['pinto-wall', 'pinto-ceiling', 'pinto-spill'];
 
     function initPhysics() {
       if (typeof Matter === 'undefined') {
@@ -135,8 +170,8 @@
 
       const engine = Engine.create({
         enableSleeping: true,
-        positionIterations: 10,
-        velocityIterations: 8
+        positionIterations: 12,
+        velocityIterations: 10
       });
       engine.gravity.y = 1.15;
 
@@ -152,128 +187,221 @@
         }
       });
 
-      function wall(x, y, w, h, angle = 0) {
-        return Bodies.rectangle(x, y, w, h, {
+      function wall(x, y, w, h, label, angle = 0) {
+        const body = Bodies.rectangle(x, y, w, h, {
           isStatic: true,
           angle,
           friction: 0.55,
           restitution: 0.02,
           render: { visible: false }
         });
+        body.label = label;
+        body.friction = 0.28;
+        return body;
       }
 
-      function setJarWallFriction(...walls) {
-        walls.forEach((segment) => {
-          segment.friction = 0.28;
-        });
+      function getActiveTopTier() {
+        return TIERS[visibleTiers - 1];
       }
 
-      function buildBulbousJarWalls() {
-        const upperLeft = JAR.upperInnerLeft;
-        const upperRight = JAR.upperInnerRight;
-        const lowerLeft = JAR.innerLeft;
-        const lowerRight = JAR.innerRight;
-        const splitY = JAR.bulgeSplitY;
+      function updatePintoVisual() {
+        const tier = getActiveTopTier();
+        const clip = document.getElementById('pinto-clip');
+        const badge = document.getElementById('tier-badge');
+        const revealTop = visibleTiers >= PINTO.tierCount
+          ? Math.max(0, Math.round(PINTO.fullRevealTopY))
+          : Math.max(0, Math.round(tier.revealTopY));
+        clip.style.clipPath = `inset(${revealTop}px 0 0 0)`;
+        clip.style.webkitClipPath = `inset(${revealTop}px 0 0 0)`;
+        badge.textContent = overflowMode
+          ? `ชั้น ${visibleTiers} / ${PINTO.tierCount} · ล้นแล้ว`
+          : `ชั้น ${visibleTiers} / ${PINTO.tierCount}`;
+      }
 
-        const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 18);
-        const bottomLeft = wall(lowerLeft + 6, JAR.lowerWallCenterY, 14, JAR.lowerWallHeight);
-        const bottomRight = wall(lowerRight - 6, JAR.lowerWallCenterY, 14, JAR.lowerWallHeight);
-        const topLeft = wall(upperLeft, JAR.upperWallCenterY, 14, JAR.upperWallHeight);
-        const topRight = wall(upperRight, JAR.upperWallCenterY, 14, JAR.upperWallHeight);
+      function clearStructureBodies() {
+        if (!structureBodies.length) return;
+        World.remove(engine.world, structureBodies);
+        structureBodies = [];
+      }
 
-        const shoulderLeft = wall(
-          (upperLeft + lowerLeft) / 2 - 4,
-          splitY,
-          12,
-          40,
-          0.48
-        );
-        const shoulderRight = wall(
-          (upperRight + lowerRight) / 2 + 4,
-          splitY,
-          12,
-          40,
-          -0.48
-        );
-
-        const flareLeft = wall(upperLeft + 14, JAR.wallTopY + 34, 10, 36, 0.28);
-        const flareRight = wall(upperRight - 14, JAR.wallTopY + 34, 10, 36, -0.28);
-        const rimLeft = wall(upperLeft - 2, JAR.wallTopY + 10, 50, 9, -0.5);
-        const rimRight = wall(upperRight + 2, JAR.wallTopY + 10, 50, 9, 0.5);
-
-        setJarWallFriction(
-          bottomLeft, bottomRight, topLeft, topRight,
-          shoulderLeft, shoulderRight, flareLeft, flareRight, rimLeft, rimRight
-        );
+      function buildTierWalls(tier) {
         return [
-          floor, bottomLeft, bottomRight, topLeft, topRight,
-          shoulderLeft, shoulderRight, flareLeft, flareRight, rimLeft, rimRight
+          wall(PINTO.centerX, tier.floorY, tier.floorWidth, 10, 'pinto-wall'),
+          wall(tier.innerLeft + 2, tier.wallCenterY, 10, tier.wallHeight, 'pinto-wall'),
+          wall(tier.innerRight - 2, tier.wallCenterY, 10, tier.wallHeight, 'pinto-wall')
         ];
       }
 
-      function buildJarWalls() {
-        if (JAR.wallStyle === 'bulbous') {
-          return buildBulbousJarWalls();
-        }
-
-        const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 18);
-        const left = wall(JAR.innerLeft, JAR.wallCenterY, 16, JAR.wallHeight);
-        const right = wall(JAR.innerRight, JAR.wallCenterY, 16, JAR.wallHeight);
-        const neckLeft = wall(
-          JAR.innerLeft + JAR.neckInset + 2,
-          JAR.wallTopY + 50,
-          10, 38, -0.18
-        );
-        const neckRight = wall(
-          JAR.innerRight - JAR.neckInset - 2,
-          JAR.wallTopY + 50,
-          10, 38, 0.18
-        );
-        const rimLeft = wall(JAR.innerLeft - 4, JAR.wallTopY + 18, 44, 9, -0.72);
-        const rimRight = wall(JAR.innerRight + 4, JAR.wallTopY + 18, 44, 9, 0.72);
-        setJarWallFriction(neckLeft, neckRight, rimLeft, rimRight);
-        return [floor, left, right, neckLeft, neckRight, rimLeft, rimRight];
-      }
-
       function buildSpillSurfaces() {
-        const spillY = JAR.floorY + 16;
-        const spillFloor = wall(STAGE_W / 2, spillY, STAGE_W, 14);
-        const boundHeight = 240;
+        const spillY = SPILL_FLOOR_Y;
+        const spillFloor = wall(STAGE_W / 2, spillY, STAGE_W, 14, 'pinto-spill');
+        const boundHeight = 260;
         const boundCenterY = spillY - boundHeight / 2 + 8;
-        const leftBound = wall(14, boundCenterY, 12, boundHeight);
-        const rightBound = wall(STAGE_W - 14, boundCenterY, 12, boundHeight);
+        const leftBound = wall(14, boundCenterY, 12, boundHeight, 'pinto-spill');
+        const rightBound = wall(STAGE_W - 14, boundCenterY, 12, boundHeight, 'pinto-spill');
         return [spillFloor, leftBound, rightBound];
       }
 
-      World.add(engine.world, [...buildJarWalls(), ...buildSpillSurfaces()]);
+      function buildOverflowTopTierWalls(tier) {
+        const rimHeight = 48;
+        const rimCenterY = tier.floorY - rimHeight / 2 + 4;
+        return [
+          wall(PINTO.centerX, tier.floorY, tier.floorWidth, 14, 'pinto-wall'),
+          wall(tier.innerLeft, rimCenterY, 12, rimHeight, 'pinto-wall'),
+          wall(tier.innerRight, rimCenterY, 12, rimHeight, 'pinto-wall')
+        ];
+      }
+
+      function rebuildStructure() {
+        clearStructureBodies();
+        const walls = [];
+
+        for (let i = 0; i < visibleTiers; i++) {
+          const isOverflowTop = overflowMode && i === PINTO.tierCount - 1;
+          walls.push(...(isOverflowTop ? buildOverflowTopTierWalls(TIERS[i]) : buildTierWalls(TIERS[i])));
+        }
+
+        if (!overflowMode) {
+          const topTier = getActiveTopTier();
+          walls.push(
+            wall(
+              PINTO.centerX,
+              topTier.topY + 5,
+              topTier.floorWidth - 4,
+              6,
+              'pinto-ceiling'
+            )
+          );
+        } else {
+          walls.push(...buildSpillSurfaces());
+        }
+
+        structureBodies = walls;
+        World.add(engine.world, walls);
+        updatePintoVisual();
+      }
 
       function getGiftBodies() {
         return Composite.allBodies(engine.world).filter((b) => GIFT_LABELS.includes(b.label));
       }
 
-      function giftRadius(diamonds) {
-        return giftPhysicsRadius(diamonds);
+      function giftsInTier(tierIndex) {
+        const tier = TIERS[tierIndex];
+        return getGiftBodies().filter((body) => {
+          const y = body.position.y;
+          const r = body.circleRadius || 12;
+          const inX = body.position.x >= tier.innerLeft - r && body.position.x <= tier.innerRight + r;
+          return inX && y + r >= tier.topY - 4 && y - r <= tier.floorY + 6;
+        });
       }
 
-      function getJarInnerXAtY(y) {
-        if (JAR.wallStyle !== 'bulbous' || JAR.upperInnerLeft == null) {
-          return { left: JAR.innerLeft, right: JAR.innerRight };
-        }
-
-        if (y <= JAR.bulgeSplitY) {
-          return { left: JAR.upperInnerLeft, right: JAR.upperInnerRight };
-        }
-
-        const t = Math.min(1, (y - JAR.bulgeSplitY) / (JAR.floorY - JAR.bulgeSplitY));
-        return {
-          left: JAR.upperInnerLeft + (JAR.innerLeft - JAR.upperInnerLeft) * t,
-          right: JAR.upperInnerRight + (JAR.innerRight - JAR.upperInnerRight) * t,
-        };
+      function getGiftTop(body) {
+        return body.position.y - (body.circleRadius || 12);
       }
 
-      function isOutsideJarX(x, y = JAR.floorY) {
+      function getTierPileTop(tierIndex) {
+        const gifts = giftsInTier(tierIndex);
+        if (!gifts.length) return Infinity;
+        return Math.min(...gifts.map(getGiftTop));
+      }
+
+      function getGiftsAtRim(tierIndex) {
+        const tier = TIERS[tierIndex];
+        const rimY = tier.topY + 10;
+        return giftsInTier(tierIndex).filter((body) => getGiftTop(body) <= rimY);
+      }
+
+      function isTierSpilling(tierIndex) {
+        if (tierUnlockAt[tierIndex]) return false;
+
+        const tier = TIERS[tierIndex];
+        const gifts = giftsInTier(tierIndex);
+        const minGifts = tierIndex === 0 ? 5 : 3;
+        if (gifts.length < minGifts) return false;
+
+        const pileTop = getTierPileTop(tierIndex);
+        const rimGifts = getGiftsAtRim(tierIndex);
+        const interior = tier.floorY - tier.topY;
+        const fillDepth = Number.isFinite(pileTop) ? tier.floorY - pileTop : 0;
+        const fillRatio = fillDepth / interior;
+        const ceilingBottom = tier.topY + 7;
+        const pileAtRim = pileTop <= ceilingBottom && fillRatio >= 0.72;
+        const spillOverRim = rimGifts.length >= 2 && fillRatio >= 0.65;
+
+        return pileAtRim || spillOverRim;
+      }
+
+      function unlockNextTier() {
+        if (visibleTiers >= PINTO.tierCount) return;
+        tierUnlockAt[visibleTiers - 1] = true;
+        visibleTiers += 1;
+        rebuildStructure();
+      }
+
+      function enableOverflow() {
+        if (overflowMode || visibleTiers < PINTO.tierCount) return;
+        overflowMode = true;
+        rebuildStructure();
+      }
+
+      function checkTierProgression() {
+        if (visibleTiers < PINTO.tierCount) {
+          const tierIndex = visibleTiers - 1;
+          if (isTierSpilling(tierIndex)) {
+            unlockNextTier();
+          }
+          return;
+        }
+
+        if (!overflowMode && isTierSpilling(PINTO.tierCount - 1)) {
+          enableOverflow();
+        }
+      }
+
+      function drawTierGuides(ctx) {
+        const guideColor = '#0b5d1e';
+        const rimColor = '#0d7a28';
+        const floorColor = '#085018';
+
+        for (let i = 0; i < TIERS.length; i++) {
+          const tier = TIERS[i];
+          const left = tier.innerLeft;
+          const right = tier.innerRight;
+          const width = right - left;
+          const height = tier.floorY - tier.topY;
+
+          ctx.save();
+          ctx.globalAlpha = i < visibleTiers ? 0.78 : 0.22;
+          ctx.strokeStyle = guideColor;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(left, tier.topY, width, height);
+
+          ctx.strokeStyle = rimColor;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(left, tier.topY);
+          ctx.lineTo(right, tier.topY);
+          ctx.stroke();
+
+          ctx.strokeStyle = floorColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(left, tier.floorY);
+          ctx.lineTo(right, tier.floorY);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      function getOverflowBounds() {
+        const tier = TIERS[PINTO.tierCount - 1];
+        return { left: tier.innerLeft, right: tier.innerRight };
+      }
+
+      function isOutsidePintoX(x, y = SPILL_FLOOR_Y) {
+        if (!overflowMode) return false;
         const margin = 10;
-        const bounds = getJarInnerXAtY(y);
+        const bounds = getOverflowBounds();
         return x < bounds.left - margin || x > bounds.right + margin;
       }
 
@@ -282,16 +410,21 @@
         return body.position.y + radius >= SPILL_FLOOR_Y - 14;
       }
 
+      function getSettleMinY() {
+        const tier = TIERS[0];
+        return tier.topY + 24;
+      }
+
       function canSettleGift(body) {
         if (!body) return false;
-        if (isOutsideJarX(body.position.x, body.position.y)) {
+        if (isOutsidePintoX(body.position.x, body.position.y)) {
           return isOnSpillFloor(body);
         }
-        return body.position.y >= SETTLE_MIN_Y;
+        return body.position.y >= getSettleMinY();
       }
 
       function getSettleThresholds(body) {
-        if (isOutsideJarX(body.position.x, body.position.y)) {
+        if (isOutsidePintoX(body.position.x, body.position.y)) {
           return { speed: SETTLE_SPEED_SPILL, idleMs: SETTLE_IDLE_MS_SPILL };
         }
         return { speed: SETTLE_SPEED_INSIDE, idleMs: SETTLE_IDLE_MS_INSIDE };
@@ -307,7 +440,7 @@
         body.frozen = true;
       }
 
-      function thawNeckGift(body) {
+      function thawStuckGift(body) {
         if (!body || !body.isStatic) return;
         Body.setStatic(body, false);
         body.label = 'gift';
@@ -337,7 +470,7 @@
         if (excess <= 0) return;
 
         dynamic
-          .filter((b) => b.label === 'gift' && b.position.y < SETTLE_MIN_Y)
+          .filter((b) => b.label === 'gift' && b.position.y < getSettleMinY())
           .sort((a, b) => a.position.y - b.position.y)
           .slice(0, excess)
           .forEach((body) => {
@@ -347,13 +480,6 @@
             });
             body.lastNudgeTime = Date.now();
           });
-      }
-
-      function updateRenderQuality() {
-        const count = getGiftBodies().length;
-        render.options.pixelRatio = count > 45
-          ? 1
-          : Math.min(window.devicePixelRatio || 1, 2);
       }
 
       function loadGiftImage(url) {
@@ -374,20 +500,39 @@
         return img;
       }
 
+      function getGiftSpawnPoint(topTier, radius) {
+        const pad = 6;
+        const innerLeft = topTier.innerLeft + radius + pad;
+        const innerRight = topTier.innerRight - radius - pad;
+        const rimGap = 20;
+        const innerTop = topTier.topY + rimGap + radius;
+        const innerBottom = topTier.floorY - radius - pad;
+        const yLow = innerTop;
+        const yHigh = innerBottom;
+        const xSpan = Math.max(14, (innerRight - innerLeft) * 0.68);
+
+        return {
+          x: Math.max(
+            innerLeft,
+            Math.min(innerRight, PINTO.centerX + (Math.random() - 0.5) * xSpan * 2)
+          ),
+          y: yLow + Math.random() * Math.max(12, yHigh - yLow)
+        };
+      }
+
       function createGift(data) {
         const diamonds = Number(data.diamonds) || 1;
-        const radius = giftRadius(diamonds);
-        const x = JAR.centerX + (Math.random() - 0.5) * JAR.mouthHalfWidth * 1.6;
-        const spawnLift = JAR.mouthY * 0.1;
-        const y = JAR.mouthY - spawnLift - Math.random() * 14 - Math.max(0, radius - 12);
+        const radius = giftPhysicsRadius(diamonds);
+        const topTier = getActiveTopTier();
+        const spawn = getGiftSpawnPoint(topTier, radius);
 
-        const gift = Bodies.circle(x, y, radius, {
-          restitution: 0.38,
-          friction: 0.28,
-          frictionStatic: 0.32,
-          frictionAir: 0.012,
-          density: 0.0009 * (14 / radius),
-          slop: 0.02,
+        const gift = Bodies.circle(spawn.x, spawn.y, radius, {
+          restitution: 0.62,
+          friction: 0.1,
+          frictionStatic: 0.14,
+          frictionAir: 0.008,
+          density: 0.00075 * (14 / radius),
+          slop: 0.015,
           render: {
             fillStyle: 'transparent',
             strokeStyle: 'transparent',
@@ -402,9 +547,9 @@
         gift.sleepThreshold = Infinity;
 
         World.add(engine.world, gift);
-        Body.setAngularVelocity(gift, (Math.random() - 0.5) * 0.16);
+        Body.setAngularVelocity(gift, (Math.random() - 0.5) * 0.22);
         Body.setVelocity(gift, {
-          x: (Math.random() - 0.5) * 0.55,
+          x: (Math.random() - 0.5) * 0.9,
           y: 1.8 + Math.random() * 1.2
         });
 
@@ -442,29 +587,26 @@
         });
       }
 
-      function shouldThawFrozenGift(body) {
-        if (body.position.y < SETTLE_MIN_Y) return true;
-        if (isOutsideJarX(body.position.x, body.position.y) && !isOnSpillFloor(body)) return true;
-        return false;
-      }
-
-      function relieveNeckJam() {
+      function relieveStuckGifts() {
         const now = Date.now();
+        const topTier = getActiveTopTier();
+        const neckY = topTier.mouthY - 18;
 
         getGiftBodies().forEach((body) => {
-          if (body.isStatic && shouldThawFrozenGift(body)) {
-            thawNeckGift(body);
+          if (body.isStatic) {
+            if (isOutsidePintoX(body.position.x, body.position.y) && !isOnSpillFloor(body)) {
+              thawStuckGift(body);
+            }
             return;
           }
 
-          if (body.label !== 'gift' || body.isStatic) return;
-          if (body.position.y >= SETTLE_MIN_Y) return;
+          if (body.label !== 'gift') return;
+          if (body.position.y < topTier.topY - 6) return;
+          if (body.position.y > topTier.floorY + 12) return;
 
           const lastNudge = body.lastNudgeTime || body.spawnTime || 0;
           const stuckFor = now - lastNudge;
-          const inNeck = body.position.y >= NECK_NUDGE_Y;
-
-          if (body.speed < 0.28 && stuckFor > (inNeck ? 500 : 900)) {
+          if (body.speed < 0.28 && stuckFor > (body.position.y >= neckY ? 500 : 900)) {
             Body.setVelocity(body, {
               x: (Math.random() - 0.5) * 1.1,
               y: Math.max(body.velocity.y, 2.8 + Math.random() * 1.4)
@@ -478,16 +620,30 @@
         });
       }
 
-      function resetJar() {
+      function resetPinto() {
         const gifts = getGiftBodies();
         World.remove(engine.world, gifts);
         giftCount = 0;
-        updateRenderQuality();
+        visibleTiers = 1;
+        overflowMode = false;
+        tierUnlockAt.fill(false);
+        rebuildStructure();
+      }
+
+      function updateRenderQuality() {
+        const count = getGiftBodies().length;
+        render.options.pixelRatio = count > 45
+          ? 1
+          : Math.min(window.devicePixelRatio || 1, 2);
       }
 
       Events.on(render, 'afterRender', () => {
         const ctx = render.context;
         const gifts = getGiftBodies();
+
+        if (showTierGuides) {
+          drawTierGuides(ctx);
+        }
 
         for (const body of gifts) {
           const img = body.giftImage;
@@ -522,9 +678,10 @@
 
       Events.on(engine, 'beforeUpdate', () => {
         removeFallenGifts();
-        relieveNeckJam();
+        relieveStuckGifts();
         trackGiftMotion();
         settleIdleGifts();
+        checkTierProgression();
       });
 
       if (!isPreview) {
@@ -559,7 +716,7 @@
         if (key === 'g') spawnTestGift(TEST_GIFT_SIZES.g);
         if (key === 'h') spawnTestGift(TEST_GIFT_SIZES.h);
         if (key === 'j') spawnTestGift(TEST_GIFT_SIZES.j);
-        if (key === 'r') resetJar();
+        if (key === 'r') resetPinto();
       });
 
       if (isPreview) {
@@ -572,6 +729,7 @@
         }, 800);
       }
 
+      rebuildStructure();
       Render.run(render);
       Runner.run(Runner.create(), engine);
     }
