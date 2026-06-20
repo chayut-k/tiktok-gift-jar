@@ -1136,6 +1136,8 @@
     function selectPintoCoinsDisplay(coinsId) {
       selectedPintoShowCoins = coinsId;
       localStorage.setItem('tgj_pinto_show_coins', coinsId);
+      const select = document.getElementById('pintoCoinsSelect');
+      if (select) select.value = coinsId;
       updatePintoPhysicsOverlay();
     }
 
@@ -1154,7 +1156,7 @@
       const info = document.createElement('div');
       info.style.flex = '1';
       info.innerHTML = `
-        <strong>🍱 Gift Pinto (ฟิสิกส์ 4 ชั้น)</strong><br>
+        <strong>🍱 Gift Pinto (ฟิสิกส์ 4 ชั้น) (อยู่ในช่วงทดลอง) </strong><br>
         <span id="giftPintoPhysicsLinkText">${getGiftPintoPhysicsUrl()}</span>
       `;
 
@@ -1183,7 +1185,7 @@
       const help = document.createElement('p');
       help.className = 'help';
       help.style.marginTop = '0';
-      help.textContent = 'เริ่มแสดงชั้นล่าง → ขยับชั้นเมื่อใกล้เต็ม → ชั้นบนเต็มแล้วของขวัญล้นออกข้าง';
+      help.textContent = 'เริ่มแสดงชั้นล่าง → ขยับชั้นเมื่อใกล้เต็ม → ชั้นบนเต็มแล้วของขวัญล้นออกข้าง (เลือกแสดง/ซ่อนยอดเหรียญได้ด้านล่าง)';
 
       const coinsLabel = document.createElement('label');
       coinsLabel.textContent = 'แสดงยอดเหรียญรวม';
@@ -1240,7 +1242,7 @@
       const info = document.createElement('div');
       info.style.flex = '1';
       info.innerHTML = `
-        <strong>🫙 Gift Jar (ฟิสิกส์)</strong><br>
+        <strong>🫙 Gift Jar (ฟิสิกส์) (โอ้ง(่jar4) สเกลอาจจะไม่ตรงเล็กน้อย)</strong><br>
         <span id="giftJarPhysicsLinkText">${getGiftJarPhysicsUrl()}</span>
       `;
 

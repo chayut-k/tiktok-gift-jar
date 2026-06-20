@@ -6,15 +6,14 @@ const PINTO_IMAGE = {
   h: 1072
 };
 
-// วัดจากแถบเขียวในรูป (mid y): 307.5, 480.5, 653.5, 823.5 บนภาพ 1072px
-// floor ชั้นล่าง = ขอบบนชั้นบน (ใช้ค่าเดียวกัน ไม่เว้นช่องว่าง)
+// พิกัดจากรูปต้นฉบับ (ภาพ 960×1072, Y=0 ด้านบน)
+// ชั้น1 ก้น Y=980 | ขอบบน Y=832 | ชั้น2 ขอบบน Y=646 | ชั้น3 ขอบบน ~307.5
 const PINTO_BAND_N = {
   band43: 307.5 / 1072,
-  band32: 480.5 / 1072,
-  band21: 653.5 / 1072,
-  band10: 823.5 / 1072,
+  tier2Top: 646 / 1072,
+  tier1Top: 832 / 1072,
+  tier1Floor: 980 / 1072,
   tier4Top: 140 / 1072,
-  tier1Base: 968 / 1072,
   handleTop: 0
 };
 
@@ -22,34 +21,34 @@ const PINTO_TIER_DEFS = [
   {
     id: 1,
     label: 'ชั้นล่าง',
-    topN: PINTO_BAND_N.band21,
-    floorN: PINTO_BAND_N.tier1Base,
-    revealTopN: PINTO_BAND_N.band21 - 0.009,
+    topN: PINTO_BAND_N.tier1Top,
+    floorN: PINTO_BAND_N.tier1Floor,
+    revealTopN: PINTO_BAND_N.tier1Top - 0.009,
     innerLeftN: 0.262,
     innerRightN: 0.748,
-    mouthN: (PINTO_BAND_N.band21 + PINTO_BAND_N.tier1Base) / 2,
+    mouthN: (PINTO_BAND_N.tier1Top + PINTO_BAND_N.tier1Floor) / 2,
     mouthHalfN: 0.056
   },
   {
     id: 2,
     label: 'ชั้น 2',
-    topN: PINTO_BAND_N.band32,
-    floorN: PINTO_BAND_N.band21,
-    revealTopN: PINTO_BAND_N.band32 - 0.009,
+    topN: PINTO_BAND_N.tier2Top,
+    floorN: PINTO_BAND_N.tier1Top,
+    revealTopN: PINTO_BAND_N.tier2Top - 0.009,
     innerLeftN: 0.262,
     innerRightN: 0.748,
-    mouthN: (PINTO_BAND_N.band32 + PINTO_BAND_N.band21) / 2,
+    mouthN: (PINTO_BAND_N.tier2Top + PINTO_BAND_N.tier1Top) / 2,
     mouthHalfN: 0.054
   },
   {
     id: 3,
     label: 'ชั้น 3',
     topN: PINTO_BAND_N.band43,
-    floorN: PINTO_BAND_N.band32,
+    floorN: PINTO_BAND_N.tier2Top,
     revealTopN: PINTO_BAND_N.band43 - 0.009,
     innerLeftN: 0.262,
     innerRightN: 0.748,
-    mouthN: (PINTO_BAND_N.band43 + PINTO_BAND_N.band32) / 2,
+    mouthN: (PINTO_BAND_N.band43 + PINTO_BAND_N.tier2Top) / 2,
     mouthHalfN: 0.052
   },
   {
