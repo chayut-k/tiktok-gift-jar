@@ -426,8 +426,10 @@
     let selectedGiftJar = 1;
     let selectedPhysicsJar = 'jar1';
     let selectedPhysicsShowCoins = 'show';
+    let selectedPhysicsGiftSize = 'normal';
     let selectedPinto = 'pinto2';
     let selectedPintoShowCoins = 'show';
+    let selectedPintoGiftSize = 'normal';
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
     let selectedTopLikersNameColor = 'white';
@@ -487,6 +489,11 @@
       { id: 'hide', label: 'ซ่อนยอดเหรียญ (เหลือแต่โถ)' },
     ];
 
+    const GIFT_SIZE_OPTIONS = [
+      { id: 'normal', label: 'ปกติ (ค่าเริ่มต้น)' },
+      { id: 'small', label: 'เล็ก (ลด 20%)' },
+    ];
+
     function loadSavedJarPreference() {
       const saved = parseInt(localStorage.getItem('tgj_selected_jar') || '1', 10);
       if (Number.isFinite(saved)) {
@@ -494,19 +501,27 @@
       }
       const savedPhysics = localStorage.getItem('tgj_selected_physics_jar');
       const savedPhysicsCoins = localStorage.getItem('tgj_physics_show_coins');
+      const savedPhysicsGiftSize = localStorage.getItem('tgj_physics_gift_size');
       const savedPinto = localStorage.getItem('tgj_selected_pinto');
       const savedPintoCoins = localStorage.getItem('tgj_pinto_show_coins');
+      const savedPintoGiftSize = localStorage.getItem('tgj_pinto_gift_size');
       if (savedPhysics && PHYSICS_JAR_OPTIONS.some((jar) => jar.id === savedPhysics)) {
         selectedPhysicsJar = savedPhysics;
       }
       if (COINS_DISPLAY_OPTIONS.some((opt) => opt.id === savedPhysicsCoins)) {
         selectedPhysicsShowCoins = savedPhysicsCoins;
       }
+      if (GIFT_SIZE_OPTIONS.some((opt) => opt.id === savedPhysicsGiftSize)) {
+        selectedPhysicsGiftSize = savedPhysicsGiftSize;
+      }
       if (savedPinto && PINTO_OPTIONS.some((pinto) => pinto.id === savedPinto)) {
         selectedPinto = savedPinto;
       }
       if (COINS_DISPLAY_OPTIONS.some((opt) => opt.id === savedPintoCoins)) {
         selectedPintoShowCoins = savedPintoCoins;
+      }
+      if (GIFT_SIZE_OPTIONS.some((opt) => opt.id === savedPintoGiftSize)) {
+        selectedPintoGiftSize = savedPintoGiftSize;
       }
     }
 
@@ -983,9 +998,13 @@
       const url = new URL(path, window.location.origin);
       url.searchParams.set('user', username);
       Object.entries(extraParams).forEach(([key, value]) => {
-        url.searchParams.set(key, value);
+        if (value != null && value !== '') url.searchParams.set(key, value);
       });
       return url.toString();
+    }
+
+    function giftSizeUrlParam(giftSizeId) {
+      return giftSizeId === 'small' ? 'small' : '';
     }
 
     function getGiftJarUrl(jarId = selectedGiftJar) {
@@ -994,20 +1013,28 @@
 
     function getGiftJarPhysicsUrl(
       jarId = selectedPhysicsJar,
-      coins = selectedPhysicsShowCoins
+      coins = selectedPhysicsShowCoins,
+      giftSize = selectedPhysicsGiftSize
     ) {
-      return buildOverlayUrl('/gift-jar-physics.html', connectedUsername, { jar: jarId, coins });
+      return buildOverlayUrl('/gift-jar-physics.html', connectedUsername, {
+        jar: jarId,
+        coins,
+        giftsize: giftSizeUrlParam(giftSize),
+      });
     }
 
     function setPhysicsPreviewFrame(
       jarId = selectedPhysicsJar,
-      coins = selectedPhysicsShowCoins
+      coins = selectedPhysicsShowCoins,
+      giftSize = selectedPhysicsGiftSize
     ) {
       const frame = document.getElementById('physicsJarPreview');
       if (!frame) return;
       const url = new URL('/gift-jar-physics.html', window.location.origin);
       url.searchParams.set('jar', jarId);
       url.searchParams.set('coins', coins);
+      const giftSizeParam = giftSizeUrlParam(giftSize);
+      if (giftSizeParam) url.searchParams.set('giftsize', giftSizeParam);
       url.searchParams.set('preview', '1');
       frame.src = 'about:blank';
       setTimeout(() => {
@@ -1043,6 +1070,16 @@
 
       const select = document.getElementById('physicsCoinsSelect');
       if (select) select.value = coinsId;
+
+      updatePhysicsJarOverlay();
+    }
+
+    function selectPhysicsGiftSize(sizeId) {
+      selectedPhysicsGiftSize = sizeId;
+      localStorage.setItem('tgj_physics_gift_size', sizeId);
+
+      const select = document.getElementById('physicsGiftSizeSelect');
+      if (select) select.value = sizeId;
 
       updatePhysicsJarOverlay();
     }
@@ -1207,23 +1244,28 @@
 
     function getGiftPintoPhysicsUrl(
       pintoId = selectedPinto,
-      coins = selectedPintoShowCoins
+      coins = selectedPintoShowCoins,
+      giftSize = selectedPintoGiftSize
     ) {
       return buildOverlayUrl('/gift-pinto-physics.html', connectedUsername, {
         pinto: pintoId,
-        coins
+        coins,
+        giftsize: giftSizeUrlParam(giftSize),
       });
     }
 
     function setPintoPreviewFrame(
       pintoId = selectedPinto,
-      coins = selectedPintoShowCoins
+      coins = selectedPintoShowCoins,
+      giftSize = selectedPintoGiftSize
     ) {
       const frame = document.getElementById('pintoPhysicsPreview');
       if (!frame) return;
       const url = new URL('/gift-pinto-physics.html', window.location.origin);
       url.searchParams.set('pinto', pintoId);
       url.searchParams.set('coins', coins);
+      const giftSizeParam = giftSizeUrlParam(giftSize);
+      if (giftSizeParam) url.searchParams.set('giftsize', giftSizeParam);
       url.searchParams.set('preview', '1');
       frame.src = 'about:blank';
       setTimeout(() => {
@@ -1255,6 +1297,14 @@
       localStorage.setItem('tgj_pinto_show_coins', coinsId);
       const select = document.getElementById('pintoCoinsSelect');
       if (select) select.value = coinsId;
+      updatePintoPhysicsOverlay();
+    }
+
+    function selectPintoGiftSize(sizeId) {
+      selectedPintoGiftSize = sizeId;
+      localStorage.setItem('tgj_pinto_gift_size', sizeId);
+      const select = document.getElementById('pintoGiftSizeSelect');
+      if (select) select.value = sizeId;
       updatePintoPhysicsOverlay();
     }
 
@@ -1356,6 +1406,27 @@
       coinsSelect.addEventListener('change', () => selectPintoCoinsDisplay(coinsSelect.value));
       coinsRow.append(coinsLabel, coinsSelect);
 
+      const giftSizeRow = document.createElement('div');
+      giftSizeRow.className = 'tlj-setting-row';
+
+      const giftSizeLabel = document.createElement('label');
+      giftSizeLabel.className = 'tlj-row-label';
+      giftSizeLabel.textContent = 'ขนาดของขวัญ';
+      giftSizeLabel.setAttribute('for', 'pintoGiftSizeSelect');
+
+      const giftSizeSelect = document.createElement('select');
+      giftSizeSelect.id = 'pintoGiftSizeSelect';
+      giftSizeSelect.className = 'jar-select';
+      GIFT_SIZE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedPintoGiftSize) option.selected = true;
+        giftSizeSelect.appendChild(option);
+      });
+      giftSizeSelect.addEventListener('change', () => selectPintoGiftSize(giftSizeSelect.value));
+      giftSizeRow.append(giftSizeLabel, giftSizeSelect);
+
       const previewCaption = document.createElement('p');
       previewCaption.className = 'preview-caption';
       previewCaption.textContent = 'ตัวอย่างปิ่นโต 4 ชั้น (G=1 H=20 J=100 เหรียญ | R=รีเซ็ต)';
@@ -1374,7 +1445,7 @@
       scaler.appendChild(frame);
       previewWrap.appendChild(scaler);
 
-      pickerRow.append(help, pickerLabel, controls, coinsRow, previewWrap, previewCaption);
+      pickerRow.append(help, pickerLabel, controls, coinsRow, giftSizeRow, previewWrap, previewCaption);
       item.appendChild(pickerRow);
       updatePintoPhysicsOverlay();
       return item;
@@ -1457,6 +1528,23 @@
       });
       coinsSelect.addEventListener('change', () => selectPhysicsCoinsDisplay(coinsSelect.value));
 
+      const giftSizeLabel = document.createElement('label');
+      giftSizeLabel.textContent = 'ขนาดของขวัญ';
+      giftSizeLabel.setAttribute('for', 'physicsGiftSizeSelect');
+      giftSizeLabel.style.marginTop = '8px';
+
+      const giftSizeSelect = document.createElement('select');
+      giftSizeSelect.id = 'physicsGiftSizeSelect';
+      giftSizeSelect.className = 'jar-select';
+      GIFT_SIZE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedPhysicsGiftSize) option.selected = true;
+        giftSizeSelect.appendChild(option);
+      });
+      giftSizeSelect.addEventListener('change', () => selectPhysicsGiftSize(giftSizeSelect.value));
+
       const thumb = document.createElement('img');
       thumb.id = 'physicsJarThumb';
       thumb.src = PHYSICS_JAR_OPTIONS.find((jar) => jar.id === selectedPhysicsJar)?.image || '/images/jar1.png';
@@ -1488,9 +1576,18 @@
       scaler.appendChild(frame);
       previewWrap.appendChild(scaler);
 
-      pickerRow.append(pickerLabel, controls, coinsLabel, coinsSelect, previewWrap, previewCaption);
+      pickerRow.append(
+        pickerLabel,
+        controls,
+        coinsLabel,
+        coinsSelect,
+        giftSizeLabel,
+        giftSizeSelect,
+        previewWrap,
+        previewCaption
+      );
       item.appendChild(pickerRow);
-      setPhysicsPreviewFrame(selectedPhysicsJar, selectedPhysicsShowCoins);
+      setPhysicsPreviewFrame(selectedPhysicsJar, selectedPhysicsShowCoins, selectedPhysicsGiftSize);
       return item;
     }
 

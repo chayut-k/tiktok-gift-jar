@@ -97,6 +97,7 @@
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
     document.body.dataset.coins = getOverlayCoinsDisplay();
+    const GIFT_SIZE_MULTIPLIER = getOverlayGiftSizeMultiplier();
     const { jarId, jarConfig } = applyJarImage('jar-img');
     const JAR = jarConfig.physics;
 
@@ -292,7 +293,7 @@
       }
 
       function giftRadius(diamonds) {
-        return giftPhysicsRadius(diamonds);
+        return giftPhysicsRadius(diamonds, GIFT_SIZE_MULTIPLIER);
       }
 
       function getJarInnerXAtY(y) {

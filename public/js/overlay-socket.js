@@ -38,3 +38,13 @@ function getOverlayCoinsDisplay() {
   const coins = new URLSearchParams(window.location.search).get('coins');
   return coins === 'hide' ? 'hide' : 'show';
 }
+
+function getOverlayGiftSize() {
+  const size = new URLSearchParams(window.location.search).get('giftsize');
+  if (size === 'small' || size === 'sm') return 'small';
+  return 'normal';
+}
+
+function getOverlayGiftSizeMultiplier() {
+  return getGiftSizeMultiplier(getOverlayGiftSize());
+}

@@ -18,10 +18,18 @@ function giftPixelSize(diamonds, baseSize = 39) {
   return Math.round(baseSize * giftScaleFactor(diamonds));
 }
 
-function giftPhysicsRadius(diamonds) {
+function getGiftSizeMultiplier(sizeId) {
+  if (sizeId === 'small' || sizeId === 'sm') return 0.8;
+  return 1;
+}
+
+function giftPhysicsRadius(diamonds, sizeMultiplier = 1) {
   const capped = normalizeGiftDiamonds(diamonds);
   const minR = 10;
   const maxR = 50;
   const t = Math.sqrt((capped - 1) / (GIFT_DIAMOND_CAP - 1));
-  return minR + t * (maxR - minR);
+  const base = minR + t * (maxR - minR);
+  const scale = Number(sizeMultiplier);
+  if (!Number.isFinite(scale) || scale <= 0) return base;
+  return base * scale;
 }

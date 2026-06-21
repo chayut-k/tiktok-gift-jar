@@ -116,6 +116,7 @@
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
     const showTierGuides = isPreview || params.get('debug') === '1';
+    const GIFT_SIZE_MULTIPLIER = getOverlayGiftSizeMultiplier();
     const selectedPintoId = getPintoVariantFromUrl();
     document.body.dataset.coins = getOverlayCoinsDisplay();
     const { pintoConfig } = applyPintoImage('pinto-img', selectedPintoId);
@@ -561,7 +562,7 @@
 
       function createGift(data) {
         const diamonds = Number(data.diamonds) || 1;
-        const radius = giftPhysicsRadius(diamonds) * PINTO_GIFT_SCALE;
+        const radius = giftPhysicsRadius(diamonds, PINTO_GIFT_SCALE * GIFT_SIZE_MULTIPLIER);
         const spawn = lidClosedMode
           ? getLidSpawnPoint(radius)
           : getGiftSpawnPoint(getActiveTopTier(), radius);
