@@ -10,6 +10,7 @@ const {
   FetchIsLiveError,
 } = require('tiktok-live-connector');
 const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -44,10 +45,22 @@ const APP_URL = resolveAppUrl();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const SESSION_SECRET = process.env.SESSION_SECRET || (isProd ? null : 'dev-only-secret-change-me');
 
-const defaultUsersFile = fs.existsSync('/data')
-  ? '/data/users.json'
-  : path.join(__dirname, 'users.json');
-const USERS_FILE = process.env.USERS_FILE || defaultUsersFile;
+function resolveDataDir() {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (fs.existsSync('/data')) return '/data';
+  return path.join(__dirname, '.data');
+}
+
+const DATA_DIR = resolveDataDir();
+const USERS_FILE = process.env.USERS_FILE || path.join(DATA_DIR, 'users.json');
+const SESSION_DIR = process.env.SESSION_DIR || path.join(DATA_DIR, 'sessions');
+
+function ensureDataDirs() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(SESSION_DIR, { recursive: true });
+}
+
+ensureDataDirs();
 
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || APP_URL)
   .split(',')
@@ -148,6 +161,12 @@ app.use('/google-login', authLimiter);
 
 // ================== Session ==================
 const sessionMiddleware = session({
+  store: new FileStore({
+    path: SESSION_DIR,
+    ttl: 30 * 24 * 60 * 60,
+    retries: 0,
+    logFn: () => {},
+  }),
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -1221,7 +1240,9 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running (${isProd ? 'production' : 'development'}${isRailway ? ' / Railway' : ''})`);
   console.log(`   URL: ${APP_URL}`);
   console.log(`   Health: ${APP_URL}/health`);
+  console.log(`   Data dir: ${DATA_DIR}`);
   console.log(`   Users file: ${USERS_FILE}`);
+  console.log(`   Sessions: ${SESSION_DIR}`);
   console.log('   Mode: multi-user (per-stream rooms)');
 });
 
