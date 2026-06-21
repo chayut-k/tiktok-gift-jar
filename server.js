@@ -9,8 +9,6 @@ const {
   UserOfflineError,
   FetchIsLiveError,
 } = require('tiktok-live-connector');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
 const fs = require('fs');
 const path = require('path');
@@ -44,7 +42,6 @@ function resolveAppUrl() {
 const APP_URL = resolveAppUrl();
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const SESSION_SECRET = process.env.SESSION_SECRET || (isProd ? null : 'dev-only-secret-change-me');
 
 const defaultUsersFile = fs.existsSync('/data')
@@ -60,7 +57,6 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || APP_URL)
 function requireEnv() {
   const missing = [];
   if (!GOOGLE_CLIENT_ID) missing.push('GOOGLE_CLIENT_ID');
-  if (!GOOGLE_CLIENT_SECRET) missing.push('GOOGLE_CLIENT_SECRET');
   if (!SESSION_SECRET) missing.push('SESSION_SECRET');
   if (missing.length) {
     console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
@@ -70,7 +66,7 @@ function requireEnv() {
 }
 requireEnv();
 
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // ================== App Setup ==================
 const app = express();
@@ -96,7 +92,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com', 'https://apis.google.com'],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
-      connectSrc: ["'self'", 'https://accounts.google.com', 'https://oauth2.googleapis.com', 'https://www.googleapis.com', 'wss:', 'ws:'],
+      connectSrc: ["'self'", 'https://accounts.google.com', 'wss:', 'ws:'],
       frameSrc: ["'self'", 'https://accounts.google.com'],
       fontSrc: ["'self'", 'https:', 'data:'],
       objectSrc: ["'none'"],
@@ -149,7 +145,6 @@ const connectLimiter = rateLimit({
 
 app.use('/api/', generalLimiter);
 app.use('/google-login', authLimiter);
-app.use('/auth/', authLimiter);
 
 // ================== Session ==================
 const sessionMiddleware = session({
@@ -166,8 +161,6 @@ const sessionMiddleware = session({
 });
 
 app.use(sessionMiddleware);
-app.use(passport.initialize());
-app.use(passport.session());
 app.use(express.json({ limit: '16kb' }));
 app.use(express.static('public', {
   maxAge: isProd ? '1d' : 0,
@@ -915,27 +908,17 @@ async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = n
   }
 }
 
-// ================== Google OAuth ==================
-passport.use(new GoogleStrategy({
-  clientID: GOOGLE_CLIENT_ID,
-  clientSecret: GOOGLE_CLIENT_SECRET,
-  callbackURL: `${APP_URL}/auth/google/callback`,
-},
-(accessToken, refreshToken, profile, cb) => cb(null, profile)));
-
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((user, done) => done(null, user));
-
-app.get('/auth/google', passport.authenticate('google', {
-  scope: ['profile', 'email'],
-}));
-
-app.get('/auth/google/callback',
-  passport.authenticate('google', { failureRedirect: '/' }),
-  (req, res) => res.redirect('/'));
-
 app.get('/logout', (req, res) => {
-  req.logout(() => res.redirect('/'));
+  const email = getSessionEmail(req);
+  if (email) disconnectUserStream(email, 'logout');
+
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).send('Logout failed');
+    }
+    res.clearCookie('tgj.sid');
+    res.redirect('/');
+  });
 });
 
 // ================== User Data ==================
@@ -1069,33 +1052,19 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.post('/google-login', async (req, res) => {
-  const { credential, code } = req.body || {};
-  if (!credential && !code) {
+  const { credential } = req.body || {};
+  if (!credential) {
     return res.status(400).json({ success: false, error: 'ไม่มีข้อมูล login' });
   }
 
   try {
-    let payload;
-
-    if (code) {
-      const { tokens } = await googleClient.getToken({
-        code,
-        redirect_uri: 'postmessage',
-      });
-      if (!tokens.id_token) {
-        return res.status(401).json({ success: false, error: 'Google login ไม่ถูกต้อง' });
-      }
-      const ticket = await googleClient.verifyIdToken({
-        idToken: tokens.id_token,
-        audience: GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
-    } else {
-      const ticket = await googleClient.verifyIdToken({
-        idToken: credential,
-        audience: GOOGLE_CLIENT_ID,
-      });
-      payload = ticket.getPayload();
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.email) {
+      return res.status(401).json({ success: false, error: 'Google login ไม่ถูกต้อง' });
     }
 
     const userData = await buildGoogleUserResponse(payload);

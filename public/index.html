@@ -24,21 +24,11 @@
     h1 { margin-bottom: 8px; color: #ff0050; font-size: 28px; }
     h2 { color: #ff0050; font-size: 18px; margin-top: 0; }
 
-    .google-btn {
-      background: #fff;
-      color: #000;
-      padding: 12px 28px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
+    .google-signin-wrap {
+      display: flex;
+      justify-content: center;
       margin: 16px 0;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    .google-btn:hover { background: #f0f0f0; }
 
     .card {
       background: #1a1a1a;
@@ -381,10 +371,7 @@
     <h1>🎥 TikTok Live Overlay</h1>
     <p style="color:#888">Likes - Gift Jar + Alerts</p>
     
-    <button class="google-btn" id="googleLoginBtn" type="button">
-      <img src="images/icons8-google-48.png" width="22" height="22">
-      เข้าสู่ระบบด้วย Google
-    </button>
+    <div id="googleSignInContainer" class="google-signin-wrap"></div>
     <p style="font-size:12px;color:#555">ข้อมูลของคุณจะถูกเก็บเฉพาะในเครื่องนี้</p>
   </div>
 
@@ -751,18 +738,34 @@
       }
     });
 
-    // ================== Google Login (Popup) ==================
+    // ================== Google Sign-In (ID token) ==================
     let GOOGLE_CLIENT_ID = null;
-    let googleCodeClient = null;
 
-    function initGoogleLogin() {
-      if (!GOOGLE_CLIENT_ID || !window.google?.accounts?.oauth2) return false;
-      googleCodeClient = google.accounts.oauth2.initCodeClient({
+    function initGoogleSignIn() {
+      if (!GOOGLE_CLIENT_ID || !window.google?.accounts?.id) return false;
+
+      google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        scope: 'openid email profile',
-        ux_mode: 'popup',
-        callback: handleGoogleAuthResponse,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        use_fedcm_for_prompt: true,
       });
+
+      const container = document.getElementById('googleSignInContainer');
+      if (container && !container.dataset.rendered) {
+        google.accounts.id.renderButton(container, {
+          type: 'standard',
+          theme: 'outline',
+          size: 'large',
+          text: 'signin_with',
+          locale: 'th',
+          shape: 'rectangular',
+          width: 280,
+        });
+        container.dataset.rendered = '1';
+      }
+
       return true;
     }
 
@@ -776,21 +779,9 @@
       }
     }
 
-    function googleLogin() {
-      if (!googleCodeClient && !initGoogleLogin()) {
-        alert('กำลังโหลด Google Sign-In... ลองใหม่อีกครั้ง');
-        return;
-      }
-      googleCodeClient.requestCode({ prompt: 'select_account' });
-    }
-
-    async function handleGoogleAuthResponse(response) {
-      if (response.error) {
-        alert('Login ยกเลิกหรือล้มเหลว');
-        return;
-      }
-      if (!response.code) {
-        alert('ไม่ได้รับ authorization code จาก Google');
+    async function handleGoogleCredentialResponse(response) {
+      if (!response?.credential) {
+        alert('ไม่ได้รับข้อมูลจาก Google');
         return;
       }
 
@@ -799,7 +790,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ code: response.code }),
+          body: JSON.stringify({ credential: response.credential }),
         });
         const data = await res.json();
         if (res.ok && data.success) {
@@ -1882,7 +1873,6 @@
     }
 
     function bindEvents() {
-      document.getElementById('googleLoginBtn').addEventListener('click', googleLogin);
       document.getElementById('connectBtn').addEventListener('click', connectTikTok);
       document.getElementById('saveOnlyBtn').addEventListener('click', saveOnly);
       document.getElementById('disconnectBtn').addEventListener('click', disconnectTikTok);
@@ -1896,9 +1886,9 @@
       bindEvents();
       await loadAppConfig();
       await restoreSession();
-      if (!initGoogleLogin()) {
+      if (!initGoogleSignIn()) {
         const waitForGoogle = setInterval(() => {
-          if (initGoogleLogin()) clearInterval(waitForGoogle);
+          if (initGoogleSignIn()) clearInterval(waitForGoogle);
         }, 200);
       }
     });
