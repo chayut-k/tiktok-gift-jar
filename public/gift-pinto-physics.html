@@ -116,8 +116,9 @@
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
     const showTierGuides = isPreview || params.get('debug') === '1';
+    const selectedPintoId = getPintoVariantFromUrl();
     document.body.dataset.coins = getOverlayCoinsDisplay();
-    const { pintoConfig } = applyPintoImage('pinto-img');
+    const { pintoConfig } = applyPintoImage('pinto-img', selectedPintoId);
     const PINTO = pintoConfig;
     const TIERS = PINTO.tiers;
     const TEST_GIFT_SIZES = { g: 1, h: 20, j: 100 };
@@ -142,21 +143,19 @@
     const FALLBACK_TEXTURE = '/images/rose.png';
     const FALLEN_Y = STAGE_H + 120;
     const SPILL_FLOOR_Y = PINTO.spillFloorY;
-    const SETTLE_IDLE_MS_INSIDE = 6000;
     const SETTLE_IDLE_MS_SPILL = 9000;
-    const SETTLE_SPEED_INSIDE = 0.041;
     const SETTLE_SPEED_SPILL = 0.026;
+    const PINTO_GIFT_SCALE = 0.875;
 
     let total = 0;
     let giftCount = 0;
     let visibleTiers = 1;
-    let overflowMode = false;
+    let lidClosedMode = false;
     const tierUnlockAt = [false, false, false, false];
     let structureBodies = [];
     const imageCache = new Map();
     const MAX_DYNAMIC_GIFTS = 35;
     const GIFT_LABELS = ['gift', 'gift-static'];
-    const STRUCTURE_LABELS = ['pinto-wall', 'pinto-ceiling', 'pinto-spill'];
 
     function initPhysics() {
       if (typeof Matter === 'undefined') {
@@ -208,13 +207,18 @@
         const tier = getActiveTopTier();
         const clip = document.getElementById('pinto-clip');
         const badge = document.getElementById('tier-badge');
-        const revealTop = visibleTiers >= PINTO.tierCount
-          ? Math.max(0, Math.round(PINTO.fullRevealTopY))
-          : Math.max(0, Math.round(tier.revealTopY));
+        let revealTop;
+        if (lidClosedMode) {
+          revealTop = Math.max(0, Math.round(PINTO.fullRevealTopY));
+        } else if (visibleTiers >= PINTO.tierCount) {
+          revealTop = Math.max(0, Math.round(tier.revealTopY));
+        } else {
+          revealTop = Math.max(0, Math.round(tier.revealTopY));
+        }
         clip.style.clipPath = `inset(${revealTop}px 0 0 0)`;
         clip.style.webkitClipPath = `inset(${revealTop}px 0 0 0)`;
-        badge.textContent = overflowMode
-          ? `ชั้น ${visibleTiers} / ${PINTO.tierCount} · ล้นแล้ว`
+        badge.textContent = lidClosedMode
+          ? `ปิดฝาแล้ว · กองบนฝา/พื้นได้`
           : `ชั้น ${visibleTiers} / ${PINTO.tierCount}`;
       }
 
@@ -232,24 +236,19 @@
         ];
       }
 
-      function buildSpillSurfaces() {
-        const spillY = SPILL_FLOOR_Y;
-        const spillFloor = wall(STAGE_W / 2, spillY, STAGE_W, 14, 'pinto-spill');
-        const boundHeight = 260;
-        const boundCenterY = spillY - boundHeight / 2 + 8;
-        const leftBound = wall(14, boundCenterY, 12, boundHeight, 'pinto-spill');
-        const rightBound = wall(STAGE_W - 14, boundCenterY, 12, boundHeight, 'pinto-spill');
-        return [spillFloor, leftBound, rightBound];
+      function buildLidPlatform() {
+        const lidY = PINTO.lidBottomY + 2;
+        const lidWidth = PINTO.lidRightX - PINTO.lidLeftX;
+        return wall(PINTO.centerX, lidY, lidWidth, 10, 'pinto-lid');
       }
 
-      function buildOverflowTopTierWalls(tier) {
-        const rimHeight = 48;
-        const rimCenterY = tier.floorY - rimHeight / 2 + 4;
-        return [
-          wall(PINTO.centerX, tier.floorY, tier.floorWidth, 14, 'pinto-wall'),
-          wall(tier.innerLeft, rimCenterY, 12, rimHeight, 'pinto-wall'),
-          wall(tier.innerRight, rimCenterY, 12, rimHeight, 'pinto-wall')
-        ];
+      function buildSpillSurfaces() {
+        const spillFloor = wall(STAGE_W / 2, SPILL_FLOOR_Y, STAGE_W, 14, 'pinto-spill');
+        const boundHeight = 300;
+        const boundCenterY = SPILL_FLOOR_Y - boundHeight / 2 + 6;
+        const leftBound = wall(10, boundCenterY, 12, boundHeight, 'pinto-spill');
+        const rightBound = wall(STAGE_W - 10, boundCenterY, 12, boundHeight, 'pinto-spill');
+        return [spillFloor, leftBound, rightBound];
       }
 
       function rebuildStructure() {
@@ -257,11 +256,12 @@
         const walls = [];
 
         for (let i = 0; i < visibleTiers; i++) {
-          const isOverflowTop = overflowMode && i === PINTO.tierCount - 1;
-          walls.push(...(isOverflowTop ? buildOverflowTopTierWalls(TIERS[i]) : buildTierWalls(TIERS[i])));
+          walls.push(...buildTierWalls(TIERS[i]));
         }
 
-        if (!overflowMode) {
+        if (lidClosedMode) {
+          walls.push(buildLidPlatform(), ...buildSpillSurfaces());
+        } else {
           const topTier = getActiveTopTier();
           walls.push(
             wall(
@@ -272,13 +272,17 @@
               'pinto-ceiling'
             )
           );
-        } else {
-          walls.push(...buildSpillSurfaces());
         }
 
         structureBodies = walls;
         World.add(engine.world, walls);
         updatePintoVisual();
+      }
+
+      function freezeGiftsInTier(tierIndex) {
+        giftsInTier(tierIndex).forEach((body) => {
+          freezeGift(body, true);
+        });
       }
 
       function getGiftBodies() {
@@ -324,24 +328,43 @@
         const interior = tier.floorY - tier.topY;
         const fillDepth = Number.isFinite(pileTop) ? tier.floorY - pileTop : 0;
         const fillRatio = fillDepth / interior;
+        const targetFill = tier.fillRatio || 0.9;
         const ceilingBottom = tier.topY + 7;
-        const pileAtRim = pileTop <= ceilingBottom && fillRatio >= 0.72;
-        const spillOverRim = rimGifts.length >= 2 && fillRatio >= 0.65;
+        const pileAtRim = pileTop <= ceilingBottom && fillRatio >= targetFill - 0.06;
+        const spillOverRim = rimGifts.length >= 2 && fillRatio >= targetFill - 0.12;
 
         return pileAtRim || spillOverRim;
       }
 
       function unlockNextTier() {
         if (visibleTiers >= PINTO.tierCount) return;
-        tierUnlockAt[visibleTiers - 1] = true;
+        const filledTierIndex = visibleTiers - 1;
+        tierUnlockAt[filledTierIndex] = true;
+        freezeGiftsInTier(filledTierIndex);
         visibleTiers += 1;
         rebuildStructure();
       }
 
-      function enableOverflow() {
-        if (overflowMode || visibleTiers < PINTO.tierCount) return;
-        overflowMode = true;
+      function enableLidClosed() {
+        if (lidClosedMode || visibleTiers < PINTO.tierCount) return;
+        const topTierIndex = PINTO.tierCount - 1;
+        tierUnlockAt[topTierIndex] = true;
+        freezeGiftsInTier(topTierIndex);
+        lidClosedMode = true;
         rebuildStructure();
+      }
+
+      function isSpillGift(body) {
+        if (!lidClosedMode) return false;
+        const radius = body.circleRadius || 12;
+        return body.position.y + radius >= SPILL_FLOOR_Y - 14;
+      }
+
+      function isOnLidGift(body) {
+        if (!lidClosedMode) return false;
+        const radius = body.circleRadius || 12;
+        const y = body.position.y;
+        return y + radius >= PINTO.lidBottomY - 6 && y - radius <= PINTO.lidTopY + 36;
       }
 
       function checkTierProgression() {
@@ -353,15 +376,53 @@
           return;
         }
 
-        if (!overflowMode && isTierSpilling(PINTO.tierCount - 1)) {
-          enableOverflow();
+        if (!lidClosedMode && isTierSpilling(PINTO.tierCount - 1)) {
+          enableLidClosed();
         }
+      }
+
+      function getGiftTierIndex(body) {
+        if (lidClosedMode && (isOnLidGift(body) || isSpillGift(body))) return -1;
+
+        const y = body.position.y;
+        const r = body.circleRadius || 12;
+        for (let i = TIERS.length - 1; i >= 0; i--) {
+          const tier = TIERS[i];
+          if (y + r >= tier.topY - 2 && y - r <= tier.floorY + 4) {
+            return i;
+          }
+        }
+        return -1;
+      }
+
+      function isGiftInLockedTier(body) {
+        const tierIndex = getGiftTierIndex(body);
+        return tierIndex >= 0 && tierUnlockAt[tierIndex] === true;
       }
 
       function drawTierGuides(ctx) {
         const guideColor = '#0b5d1e';
         const rimColor = '#0d7a28';
         const floorColor = '#085018';
+        const lidColor = '#c62828';
+
+        ctx.save();
+        ctx.globalAlpha = lidClosedMode ? 0.9 : 0.45;
+        ctx.strokeStyle = lidColor;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(
+          PINTO.lidLeftX,
+          PINTO.lidTopY,
+          PINTO.lidRightX - PINTO.lidLeftX,
+          PINTO.lidBottomY - PINTO.lidTopY
+        );
+        if (lidClosedMode) {
+          ctx.strokeStyle = '#1565c0';
+          ctx.setLineDash([6, 4]);
+          ctx.strokeRect(8, SPILL_FLOOR_Y - 10, STAGE_W - 16, 8);
+          ctx.setLineDash([]);
+        }
+        ctx.restore();
 
         for (let i = 0; i < TIERS.length; i++) {
           const tier = TIERS[i];
@@ -393,64 +454,25 @@
         }
       }
 
-      function getOverflowBounds() {
-        const tier = TIERS[PINTO.tierCount - 1];
-        return { left: tier.innerLeft, right: tier.innerRight };
-      }
-
-      function isOutsidePintoX(x, y = SPILL_FLOOR_Y) {
-        if (!overflowMode) return false;
-        const margin = 10;
-        const bounds = getOverflowBounds();
-        return x < bounds.left - margin || x > bounds.right + margin;
-      }
-
-      function isOnSpillFloor(body) {
-        const radius = body.circleRadius || 12;
-        return body.position.y + radius >= SPILL_FLOOR_Y - 14;
-      }
-
-      function getSettleMinY() {
-        const tier = TIERS[0];
+      function getActiveTierMinY() {
+        const tier = getActiveTopTier();
         return tier.topY + 24;
       }
 
       function canSettleGift(body) {
         if (!body) return false;
-        if (isOutsidePintoX(body.position.x, body.position.y)) {
-          return isOnSpillFloor(body);
-        }
-        return body.position.y >= getSettleMinY();
+        if (lidClosedMode) return isSpillGift(body);
+        return false;
       }
 
-      function getSettleThresholds(body) {
-        if (isOutsidePintoX(body.position.x, body.position.y)) {
-          return { speed: SETTLE_SPEED_SPILL, idleMs: SETTLE_IDLE_MS_SPILL };
-        }
-        return { speed: SETTLE_SPEED_INSIDE, idleMs: SETTLE_IDLE_MS_INSIDE };
-      }
-
-      function freezeGift(body) {
+      function freezeGift(body, force = false) {
         if (!body || body.isStatic || body.frozen) return;
-        if (!canSettleGift(body)) return;
+        if (!force && !canSettleGift(body)) return;
         Body.setStatic(body, true);
         Body.setVelocity(body, { x: 0, y: 0 });
         Body.setAngularVelocity(body, 0);
         body.label = 'gift-static';
         body.frozen = true;
-      }
-
-      function thawStuckGift(body) {
-        if (!body || !body.isStatic) return;
-        Body.setStatic(body, false);
-        body.label = 'gift';
-        body.frozen = false;
-        body.sleepThreshold = Infinity;
-        Body.setVelocity(body, {
-          x: (Math.random() - 0.5) * 0.8,
-          y: 2.4 + Math.random() * 1.2
-        });
-        body.lastNudgeTime = Date.now();
       }
 
       function enforceDynamicLimit() {
@@ -459,7 +481,7 @@
 
         let excess = dynamic.length - MAX_DYNAMIC_GIFTS;
         const settled = dynamic
-          .filter(canSettleGift)
+          .filter((body) => isSpillGift(body) || isGiftInLockedTier(body))
           .sort((a, b) => b.position.y - a.position.y);
 
         for (let i = 0; i < settled.length && excess > 0; i++) {
@@ -470,7 +492,7 @@
         if (excess <= 0) return;
 
         dynamic
-          .filter((b) => b.label === 'gift' && b.position.y < getSettleMinY())
+          .filter((b) => b.label === 'gift' && b.position.y < getActiveTierMinY())
           .sort((a, b) => a.position.y - b.position.y)
           .slice(0, excess)
           .forEach((body) => {
@@ -520,17 +542,36 @@
         };
       }
 
+      function getLidSpawnPoint(radius) {
+        const pad = 6;
+        const innerLeft = PINTO.lidLeftX + radius + pad;
+        const innerRight = PINTO.lidRightX - radius - pad;
+        const xSpread = Math.min(34, Math.max(14, radius * 1.6));
+        const dropFrom = PINTO.lidTopY - radius - 18;
+        const dropTo = PINTO.lidBottomY - radius - 56;
+
+        return {
+          x: Math.max(
+            innerLeft,
+            Math.min(innerRight, PINTO.centerX + (Math.random() - 0.5) * xSpread)
+          ),
+          y: dropFrom - Math.random() * Math.max(48, dropFrom - dropTo)
+        };
+      }
+
       function createGift(data) {
         const diamonds = Number(data.diamonds) || 1;
-        const radius = giftPhysicsRadius(diamonds);
-        const topTier = getActiveTopTier();
-        const spawn = getGiftSpawnPoint(topTier, radius);
+        const radius = giftPhysicsRadius(diamonds) * PINTO_GIFT_SCALE;
+        const spawn = lidClosedMode
+          ? getLidSpawnPoint(radius)
+          : getGiftSpawnPoint(getActiveTopTier(), radius);
+        const bounce = lidClosedMode ? 0.42 : 0.52;
 
         const gift = Bodies.circle(spawn.x, spawn.y, radius, {
-          restitution: 0.62,
-          friction: 0.1,
-          frictionStatic: 0.14,
-          frictionAir: 0.008,
+          restitution: bounce,
+          friction: 0.14,
+          frictionStatic: 0.22,
+          frictionAir: 0.012,
           density: 0.00075 * (14 / radius),
           slop: 0.015,
           render: {
@@ -549,8 +590,8 @@
         World.add(engine.world, gift);
         Body.setAngularVelocity(gift, (Math.random() - 0.5) * 0.22);
         Body.setVelocity(gift, {
-          x: (Math.random() - 0.5) * 0.9,
-          y: 1.8 + Math.random() * 1.2
+          x: (Math.random() - 0.5) * (lidClosedMode ? 0.35 : 0.9),
+          y: lidClosedMode ? 2.4 + Math.random() * 1.8 : 1.8 + Math.random() * 1.2
         });
 
         giftCount++;
@@ -574,33 +615,29 @@
       }
 
       function settleIdleGifts() {
+        if (!lidClosedMode) return;
+
         const now = Date.now();
         getGiftBodies().forEach((body) => {
           if (body.label !== 'gift' || body.isStatic) return;
-          if (!canSettleGift(body)) return;
+          if (!isSpillGift(body)) return;
 
-          const { speed, idleMs } = getSettleThresholds(body);
           const idleFor = now - (body.lastMoveTime || body.spawnTime || 0);
-          if (body.speed < speed && idleFor > idleMs) {
-            freezeGift(body);
+          if (body.speed < SETTLE_SPEED_SPILL && idleFor > SETTLE_IDLE_MS_SPILL) {
+            freezeGift(body, true);
           }
         });
       }
 
       function relieveStuckGifts() {
+        if (lidClosedMode || visibleTiers >= 3) return;
+
         const now = Date.now();
         const topTier = getActiveTopTier();
         const neckY = topTier.mouthY - 18;
 
         getGiftBodies().forEach((body) => {
-          if (body.isStatic) {
-            if (isOutsidePintoX(body.position.x, body.position.y) && !isOnSpillFloor(body)) {
-              thawStuckGift(body);
-            }
-            return;
-          }
-
-          if (body.label !== 'gift') return;
+          if (body.isStatic || body.label !== 'gift' || isGiftInLockedTier(body)) return;
           if (body.position.y < topTier.topY - 6) return;
           if (body.position.y > topTier.floorY + 12) return;
 
@@ -625,7 +662,7 @@
         World.remove(engine.world, gifts);
         giftCount = 0;
         visibleTiers = 1;
-        overflowMode = false;
+        lidClosedMode = false;
         tierUnlockAt.fill(false);
         rebuildStructure();
       }
@@ -671,8 +708,9 @@
       });
 
       Events.on(engine, 'sleepStart', (event) => {
-        if (event.body && event.body.label === 'gift' && canSettleGift(event.body)) {
-          freezeGift(event.body);
+        if (!event.body || event.body.label !== 'gift') return;
+        if (lidClosedMode && isSpillGift(event.body)) {
+          freezeGift(event.body, true);
         }
       });
 
@@ -725,7 +763,7 @@
         const previewTimer = setInterval(() => {
           spawnTestGift(previewSizes[previewCount % previewSizes.length]);
           previewCount++;
-          if (previewCount >= 18) clearInterval(previewTimer);
+          if (previewCount >= 36) clearInterval(previewTimer);
         }, 800);
       }
 

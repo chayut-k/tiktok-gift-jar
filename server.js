@@ -3,7 +3,12 @@ require('dotenv').config();
 const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
-const { TikTokLiveConnection, WebcastEvent } = require('tiktok-live-connector');
+const {
+  TikTokLiveConnection,
+  WebcastEvent,
+  UserOfflineError,
+  FetchIsLiveError,
+} = require('tiktok-live-connector');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const session = require('express-session');
@@ -177,8 +182,10 @@ io.use(wrapMiddleware(sessionMiddleware));
 // ================== Per-User Stream State ==================
 const userStreams = new Map();
 const usernameOwners = new Map();
-const DASHBOARD_GRACE_MS = 45000;
+const DASHBOARD_GRACE_MS = 35000;
 const TIKTOK_RECONNECT_DELAYS = [3000, 5000, 10000, 15000, 30000, 60000];
+const TIKTOK_MAX_RECONNECT_ATTEMPTS = 12;
+const WAIT_FOR_LIVE_POLL_MS = 35000;
 
 function createStreamState(email) {
   return {
@@ -194,7 +201,124 @@ function createStreamState(email) {
     dashboardDisconnectTimer: null,
     reconnectTimer: null,
     reconnectAttempt: 0,
+    waitingForLive: false,
+    waitForLiveTimer: null,
   };
+}
+
+function getTikTokConnectionOptions(sessionId) {
+  const options = {
+    enableExtendedGiftInfo: true,
+    processInitialData: false,
+  };
+  if (sessionId) options.sessionId = sessionId;
+  return options;
+}
+
+async function probeIsLive(tiktokUsername, sessionId = null) {
+  const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(sessionId));
+  return conn.fetchIsLive();
+}
+
+function stopWaitForLive(stream) {
+  if (!stream) return;
+  if (stream.waitForLiveTimer) {
+    clearTimeout(stream.waitForLiveTimer);
+    stream.waitForLiveTimer = null;
+  }
+  stream.waitingForLive = false;
+}
+
+async function pollWaitForLive(email) {
+  const stream = userStreams.get(email);
+  if (!stream?.waitingForLive || !stream.tiktokUsername) return;
+  if (!shouldKeepStreamAlive(stream)) {
+    stopWaitForLive(stream);
+    return;
+  }
+
+  const sessionId = users[email]?.sessionId || null;
+
+  try {
+    const isLive = await probeIsLive(stream.tiktokUsername, sessionId);
+    if (!stream.waitingForLive) return;
+
+    if (isLive) {
+      console.log(`📡 [${email}] Live detected — connecting @${stream.tiktokUsername}`);
+      stopWaitForLive(stream);
+      await startTikTokConnectionForUser(email, stream.tiktokUsername, sessionId);
+      return;
+    }
+  } catch (err) {
+    console.warn(`Wait-for-live poll [${email}]:`, err.message || err);
+  }
+
+  if (!stream.waitingForLive || !shouldKeepStreamAlive(stream)) return;
+
+  stream.waitForLiveTimer = setTimeout(() => {
+    stream.waitForLiveTimer = null;
+    pollWaitForLive(email);
+  }, WAIT_FOR_LIVE_POLL_MS);
+}
+
+function startWaitForLive(email) {
+  const stream = userStreams.get(email);
+  if (!stream?.tiktokUsername) return;
+  if (!shouldKeepStreamAlive(stream)) return;
+
+  stopWaitForLive(stream);
+  clearReconnectTimer(stream);
+  stopTikTokConnection(stream);
+
+  stream.waitingForLive = true;
+  stream.reconnectAttempt = 0;
+
+  console.log(`⏳ [${email}] Waiting for @${stream.tiktokUsername} to go live`);
+  emitStreamStatus(email, false, { reason: 'waiting_for_live' });
+  pollWaitForLive(email);
+}
+
+function isUserNotLiveError(err) {
+  if (!err) return false;
+  if (err instanceof UserOfflineError || err instanceof FetchIsLiveError) return true;
+  const msg = String(err.message || err).toLowerCase();
+  return /isn't online|not online|user.?offline|no live|isn't live/.test(msg);
+}
+
+function canReconnect(stream) {
+  if (!stream?.tiktokUsername || stream.waitingForLive) return false;
+  if (!shouldKeepStreamAlive(stream)) return false;
+  if (stream.reconnectAttempt >= TIKTOK_MAX_RECONNECT_ATTEMPTS) return false;
+  return true;
+}
+
+function stopReconnecting(email, reason, extra = {}) {
+  const stream = userStreams.get(email);
+  if (!stream) return;
+
+  clearReconnectTimer(stream);
+  stream.reconnectAttempt = 0;
+  emitStreamStatus(email, false, { reason, ...extra });
+  console.log(`⏹️ [${email}] Stop reconnect (${reason})`);
+
+  if (reason === 'reconnect_exhausted' && stream.tiktokUsername && shouldKeepStreamAlive(stream)) {
+    startWaitForLive(email);
+  }
+}
+
+function endLiveSession(email, reason = 'stream_end', extra = {}) {
+  const stream = userStreams.get(email);
+  if (!stream) return;
+
+  clearReconnectTimer(stream);
+  stream.reconnectAttempt = 0;
+  stopTikTokConnection(stream);
+  emitStreamStatus(email, false, { reason, ...extra });
+  console.log(`📴 [${email}] Live ended (${reason})`);
+
+  if (stream.tiktokUsername && shouldKeepStreamAlive(stream)) {
+    startWaitForLive(email);
+  }
 }
 
 function shouldKeepStreamAlive(stream) {
@@ -216,6 +340,7 @@ function clearReconnectTimer(stream) {
 function clearStreamTimers(stream) {
   clearDashboardGraceTimer(stream);
   clearReconnectTimer(stream);
+  stopWaitForLive(stream);
 }
 
 function getOrCreateStream(email) {
@@ -325,6 +450,7 @@ function disconnectUserStream(email, reason = 'manual') {
   stopTikTokConnection(stream);
 
   clearUsernameOwner(stream.tiktokUsername, email);
+  stream.tiktokUsername = '';
   emitStreamStatus(email, false, reason ? { reason } : {});
   console.log(`🔌 ตัดการเชื่อมต่อของ ${email} (${reason})`);
 }
@@ -347,7 +473,15 @@ function scheduleDashboardGraceDisconnect(email) {
 
 function scheduleTikTokReconnect(email) {
   const stream = userStreams.get(email);
-  if (!stream?.tiktokUsername || !shouldKeepStreamAlive(stream)) return;
+  if (!stream) return;
+
+  if (!canReconnect(stream)) {
+    if (stream.waitingForLive) return;
+    if (stream.reconnectAttempt >= TIKTOK_MAX_RECONNECT_ATTEMPTS) {
+      stopReconnecting(email, 'reconnect_exhausted', { attempt: stream.reconnectAttempt });
+    }
+    return;
+  }
 
   clearReconnectTimer(stream);
 
@@ -365,14 +499,26 @@ function scheduleTikTokReconnect(email) {
   stream.reconnectTimer = setTimeout(async () => {
     stream.reconnectTimer = null;
     const current = userStreams.get(email);
-    if (!current?.tiktokUsername || !shouldKeepStreamAlive(current)) return;
+    if (!canReconnect(current)) {
+      if (current?.reconnectAttempt >= TIKTOK_MAX_RECONNECT_ATTEMPTS && !current.waitingForLive) {
+        stopReconnecting(email, 'reconnect_exhausted', { attempt: current.reconnectAttempt });
+      }
+      return;
+    }
 
     try {
       await reconnectTikTokConnectionForUser(email);
     } catch (err) {
       console.error(`Reconnect failed [${email}]:`, err.message || err);
-      if (shouldKeepStreamAlive(current)) {
+      if (isUserNotLiveError(err)) {
+        endLiveSession(email, 'stream_end', { offline: true });
+        return;
+      }
+      const latest = userStreams.get(email);
+      if (canReconnect(latest)) {
         scheduleTikTokReconnect(email);
+      } else if (latest?.reconnectAttempt >= TIKTOK_MAX_RECONNECT_ATTEMPTS) {
+        stopReconnecting(email, 'reconnect_exhausted', { attempt: latest.reconnectAttempt });
       }
     }
   }, delay);
@@ -385,10 +531,12 @@ function syncOverlaySocket(socket, username) {
     return;
   }
 
-  socket.emit('status', {
+  const statusPayload = {
     connected: !!stream.connection,
     username: stream.tiktokUsername,
-  });
+  };
+  if (stream.waitingForLive) statusPayload.reason = 'waiting_for_live';
+  socket.emit('status', statusPayload);
 
   if (stream.totalDiamonds > 0) {
     socket.emit('gift', {
@@ -417,10 +565,20 @@ function registerDashboardSocket(socket, email) {
   socket.join(getDashboardRoom(email));
 
   if (stream.tiktokUsername) {
-    socket.emit('status', {
+    const statusPayload = {
       connected: !!stream.connection,
       username: stream.tiktokUsername,
-    });
+    };
+    if (stream.waitingForLive) statusPayload.reason = 'waiting_for_live';
+    else if (stream.reconnectTimer) {
+      statusPayload.reason = 'reconnecting';
+      statusPayload.attempt = stream.reconnectAttempt;
+    }
+    socket.emit('status', statusPayload);
+  }
+
+  if (stream.waitingForLive && !stream.waitForLiveTimer && !stream.connection) {
+    pollWaitForLive(email);
   }
 
   console.log(`🖥️ Dashboard online: ${email} (${stream.dashboardSockets.size} tab)`);
@@ -433,7 +591,9 @@ function unregisterDashboardSocket(email, socketId) {
   stream.dashboardSockets.delete(socketId);
   console.log(`🖥️ Dashboard offline: ${email} (${stream.dashboardSockets.size} tab left)`);
 
-  if (stream.dashboardSockets.size === 0 && (stream.connection || stream.reconnectTimer)) {
+  if (stream.dashboardSockets.size === 0 && (
+    stream.connection || stream.reconnectTimer || stream.waitingForLive
+  )) {
     scheduleDashboardGraceDisconnect(email);
   }
 }
@@ -590,15 +750,14 @@ function attachTikTokListeners(conn, email, connectionId) {
     if (!stream) return;
     console.log(`🔌 [${email}] TikTok disconnected`);
     stream.connection = null;
+    if (stream.waitingForLive) return;
     emitStreamStatus(email, false, { reason: 'disconnected' });
     scheduleTikTokReconnect(email);
   });
 
   conn.on('streamEnd', () => {
     if (!isActive()) return;
-    clearReconnectTimer(userStreams.get(email));
-    console.log(`📺 [${email}] Stream ended`);
-    emitStreamStatus(email, false, { reason: 'stream_end' });
+    endLiveSession(email, 'stream_end');
   });
 
   conn.on('error', (err) => {
@@ -607,14 +766,68 @@ function attachTikTokListeners(conn, email, connectionId) {
     if (!stream) return;
     console.error(`TikTok error [${email}]:`, err.message || err);
     stopTikTokConnection(stream);
+    if (stream.waitingForLive) return;
+    if (isUserNotLiveError(err)) {
+      endLiveSession(email, 'stream_end', { offline: true });
+      return;
+    }
     emitStreamStatus(email, false, { reason: 'error', error: 'Connection error' });
     scheduleTikTokReconnect(email);
   });
 }
 
+function prepareStreamUsername(email, tiktokUsername) {
+  const stream = getOrCreateStream(email);
+  const previousOwner = usernameOwners.get(tiktokUsername);
+  if (previousOwner && previousOwner !== email) {
+    const ownerStream = userStreams.get(previousOwner);
+    if (ownerStream) {
+      stopTikTokConnection(ownerStream);
+      stopWaitForLive(ownerStream);
+      clearUsernameOwner(tiktokUsername, previousOwner);
+    }
+  }
+
+  if (stream.tiktokUsername && stream.tiktokUsername !== tiktokUsername) {
+    clearUsernameOwner(stream.tiktokUsername, email);
+  }
+
+  stream.tiktokUsername = tiktokUsername;
+  usernameOwners.set(tiktokUsername, email);
+  return stream;
+}
+
+async function connectOrWaitForLive(email, tiktokUsername, sessionId = null) {
+  if (!tiktokUsername) throw new Error('TikTok Username หายไป');
+
+  const stream = prepareStreamUsername(email, tiktokUsername);
+  stopWaitForLive(stream);
+  clearReconnectTimer(stream);
+
+  if (!shouldKeepStreamAlive(stream)) {
+    throw new Error('กรุณาเปิด Dashboard ค้างไว้เพื่อรอไลฟ์');
+  }
+
+  let isLive = false;
+  try {
+    isLive = await probeIsLive(tiktokUsername, sessionId);
+  } catch (err) {
+    console.warn(`Live probe failed [${email}]:`, err.message || err);
+  }
+
+  if (!isLive) {
+    startWaitForLive(email);
+    return { mode: 'waiting' };
+  }
+
+  await startTikTokConnectionForUser(email, tiktokUsername, sessionId);
+  return { mode: 'connected' };
+}
+
 async function reconnectTikTokConnectionForUser(email) {
   const stream = userStreams.get(email);
   if (!stream?.tiktokUsername) throw new Error('TikTok Username หายไป');
+  if (stream.waitingForLive) return;
 
   if (stream.connecting) {
     await stream.connecting;
@@ -624,16 +837,11 @@ async function reconnectTikTokConnectionForUser(email) {
   const sessionId = users[email]?.sessionId || null;
 
   const connectTask = (async () => {
+    stopWaitForLive(stream);
     stopTikTokConnection(stream);
 
     const connectionId = stream.activeConnectionId;
-    const options = {
-      enableExtendedGiftInfo: true,
-      processInitialData: false,
-    };
-    if (sessionId) options.sessionId = sessionId;
-
-    const conn = new TikTokLiveConnection(tiktokUsername, options);
+    const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(sessionId));
     stream.connection = conn;
     attachTikTokListeners(conn, email, connectionId);
 
@@ -665,33 +873,15 @@ async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = n
   }
 
   const connectTask = (async () => {
-    const previousOwner = usernameOwners.get(tiktokUsername);
-    if (previousOwner && previousOwner !== email) {
-      const ownerStream = userStreams.get(previousOwner);
-      if (ownerStream) {
-        stopTikTokConnection(ownerStream);
-        clearUsernameOwner(tiktokUsername, previousOwner);
-      }
-    }
-
+    prepareStreamUsername(email, tiktokUsername);
+    stopWaitForLive(stream);
     stopTikTokConnection(stream);
 
-    if (stream.tiktokUsername && stream.tiktokUsername !== tiktokUsername) {
-      clearUsernameOwner(stream.tiktokUsername, email);
-    }
-
     resetStreamCounters(stream);
-    stream.tiktokUsername = tiktokUsername;
-    usernameOwners.set(tiktokUsername, email);
+    stream.reconnectAttempt = 0;
 
     const connectionId = stream.activeConnectionId;
-    const options = {
-      enableExtendedGiftInfo: true,
-      processInitialData: false,
-    };
-    if (sessionId) options.sessionId = sessionId;
-
-    const conn = new TikTokLiveConnection(tiktokUsername, options);
+    const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(sessionId));
     stream.connection = conn;
     attachTikTokListeners(conn, email, connectionId);
 
@@ -704,6 +894,10 @@ async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = n
     } catch (err) {
       if (stream.connection === conn) {
         stream.connection = null;
+      }
+      if (isUserNotLiveError(err) && shouldKeepStreamAlive(stream)) {
+        startWaitForLive(email);
+        return;
       }
       clearUsernameOwner(tiktokUsername, email);
       stream.tiktokUsername = '';
@@ -934,8 +1128,13 @@ app.post('/connect-tiktok', connectLimiter, async (req, res) => {
     if (sessionId) users[email].sessionId = sessionId;
     saveUsers();
 
-    await startTikTokConnectionForUser(email, tiktokUsername, sessionId);
-    res.json({ success: true, username: tiktokUsername });
+    const result = await connectOrWaitForLive(email, tiktokUsername, sessionId);
+    res.json({
+      success: true,
+      username: tiktokUsername,
+      waiting: result.mode === 'waiting',
+      connected: result.mode === 'connected',
+    });
   } catch (err) {
     console.error('Connect error:', err);
     res.status(500).json({ error: mapTikTokError(err) });
@@ -956,8 +1155,13 @@ app.post('/save-tiktok', connectLimiter, async (req, res) => {
     if (sessionId) users[email].sessionId = sessionId;
     saveUsers();
 
-    await startTikTokConnectionForUser(email, tiktokUsername, sessionId);
-    res.json({ success: true, username: tiktokUsername });
+    const result = await connectOrWaitForLive(email, tiktokUsername, sessionId);
+    res.json({
+      success: true,
+      username: tiktokUsername,
+      waiting: result.mode === 'waiting',
+      connected: result.mode === 'connected',
+    });
   } catch (err) {
     console.error('/save-tiktok error:', err);
     res.status(500).json({ error: mapTikTokError(err) });
@@ -1004,6 +1208,7 @@ app.get('/api/status', (req, res) => {
 
   res.json({
     connected: !!stream.connection,
+    waitingForLive: !!stream.waitingForLive,
     username: stream.tiktokUsername || null,
     totalDiamonds: stream.totalDiamonds,
     dashboardActive: stream.dashboardSockets.size > 0,

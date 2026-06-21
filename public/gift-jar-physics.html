@@ -108,13 +108,14 @@
     const STAGE_H = 620;
     const FALLBACK_TEXTURE = '/images/rose.png';
     const FALLEN_Y = STAGE_H + 120;
+    const ESCAPE_TOP_Y = -10;
+    const SPAWN_NEAR_TOP_MARGIN = 50;
+    const SPAWN_LOWER_BONUS_Y = 20;
     const SETTLE_MIN_Y = JAR.wallTopY + 72;
     const NECK_NUDGE_Y = JAR.wallTopY + 48;
     const SPILL_FLOOR_Y = JAR.floorY + 16;
-    const SETTLE_IDLE_MS_INSIDE = 6000;
-    const SETTLE_IDLE_MS_SPILL = 9000;
-    const SETTLE_SPEED_INSIDE = 0.041;
-    const SETTLE_SPEED_SPILL = 0.026;
+    const SETTLE_IDLE_MS_INSIDE = 12000;
+    const SETTLE_IDLE_MS_SPILL = 15000;
 
     let total = 0;
     let giftCount = 0;
@@ -138,7 +139,7 @@
         positionIterations: 10,
         velocityIterations: 8
       });
-      engine.gravity.y = 1.15;
+      engine.gravity.y = 1.22;
 
       const render = Render.create({
         element: document.getElementById('physics-layer'),
@@ -166,6 +167,37 @@
         walls.forEach((segment) => {
           segment.friction = 0.28;
         });
+      }
+
+      function buildFloorCornerWalls(leftX, rightX) {
+        const floorLeftX = JAR.centerX - JAR.floorWidth / 2;
+        const floorRightX = JAR.centerX + JAR.floorWidth / 2;
+        const bodySpan = rightX - leftX;
+        if (JAR.floorWidth >= bodySpan - 4) return [];
+
+        const sideGap = (bodySpan - JAR.floorWidth) / 2;
+        const taperHeight = Math.round(Math.min(58, Math.max(34, sideGap * 0.75)));
+        const cornerAngle = sideGap > 42 ? 0.82 : sideGap > 30 ? 0.7 : 0.58;
+        const corners = [];
+        const upperY = JAR.floorY - taperHeight * 0.5;
+
+        corners.push(
+          wall((leftX + floorLeftX) / 2, upperY, 14, taperHeight, cornerAngle),
+          wall((rightX + floorRightX) / 2, upperY, 14, taperHeight, -cornerAngle)
+        );
+
+        if (sideGap > 38) {
+          const lowerH = Math.round(taperHeight * 0.58);
+          const lowerY = JAR.floorY - lowerH * 0.42;
+          const steepAngle = cornerAngle + 0.14;
+          corners.push(
+            wall((leftX + floorLeftX) / 2 + 5, lowerY, 12, lowerH, steepAngle),
+            wall((rightX + floorRightX) / 2 - 5, lowerY, 12, lowerH, -steepAngle)
+          );
+        }
+
+        setJarWallFriction(...corners);
+        return corners;
       }
 
       function buildBulbousJarWalls() {
@@ -200,6 +232,7 @@
         const flareRight = wall(upperRight - 14, JAR.wallTopY + 34, 10, 36, -0.28);
         const rimLeft = wall(upperLeft - 2, JAR.wallTopY + 10, 50, 9, -0.5);
         const rimRight = wall(upperRight + 2, JAR.wallTopY + 10, 50, 9, 0.5);
+        const floorCorners = buildFloorCornerWalls(lowerLeft, lowerRight);
 
         setJarWallFriction(
           bottomLeft, bottomRight, topLeft, topRight,
@@ -207,7 +240,8 @@
         );
         return [
           floor, bottomLeft, bottomRight, topLeft, topRight,
-          shoulderLeft, shoulderRight, flareLeft, flareRight, rimLeft, rimRight
+          shoulderLeft, shoulderRight, flareLeft, flareRight, rimLeft, rimRight,
+          ...floorCorners
         ];
       }
 
@@ -231,17 +265,23 @@
         );
         const rimLeft = wall(JAR.innerLeft - 4, JAR.wallTopY + 18, 44, 9, -0.72);
         const rimRight = wall(JAR.innerRight + 4, JAR.wallTopY + 18, 44, 9, 0.72);
+        const floorCorners = buildFloorCornerWalls(JAR.innerLeft, JAR.innerRight);
         setJarWallFriction(neckLeft, neckRight, rimLeft, rimRight);
-        return [floor, left, right, neckLeft, neckRight, rimLeft, rimRight];
+        return [floor, left, right, neckLeft, neckRight, rimLeft, rimRight, ...floorCorners];
       }
 
       function buildSpillSurfaces() {
         const spillY = JAR.floorY + 16;
         const spillFloor = wall(STAGE_W / 2, spillY, STAGE_W, 14);
-        const boundHeight = 240;
-        const boundCenterY = spillY - boundHeight / 2 + 8;
-        const leftBound = wall(14, boundCenterY, 12, boundHeight);
-        const rightBound = wall(STAGE_W - 14, boundCenterY, 12, boundHeight);
+        spillFloor.friction = 0.38;
+
+        const frameWallW = 10;
+        const frameWallX = frameWallW / 2;
+        const leftBound = wall(frameWallX, STAGE_H / 2, frameWallW, STAGE_H);
+        const rightBound = wall(STAGE_W - frameWallX, STAGE_H / 2, frameWallW, STAGE_H);
+        leftBound.friction = 0.18;
+        rightBound.friction = 0.18;
+
         return [spillFloor, leftBound, rightBound];
       }
 
@@ -277,24 +317,36 @@
         return x < bounds.left - margin || x > bounds.right + margin;
       }
 
+      function isSpilledOutsideJar(x, y = JAR.floorY) {
+        const margin = 8;
+        return x < JAR.innerLeft - margin || x > JAR.innerRight + margin;
+      }
+
       function isOnSpillFloor(body) {
         const radius = body.circleRadius || 12;
         return body.position.y + radius >= SPILL_FLOOR_Y - 14;
       }
 
+      function isSpilledGift(body) {
+        return isSpilledOutsideJar(body.position.x, body.position.y);
+      }
+
+      function getFreezeIdleMs(body) {
+        return isSpilledGift(body) ? SETTLE_IDLE_MS_SPILL : SETTLE_IDLE_MS_INSIDE;
+      }
+
       function canSettleGift(body) {
         if (!body) return false;
-        if (isOutsideJarX(body.position.x, body.position.y)) {
+        if (isSpilledGift(body)) {
           return isOnSpillFloor(body);
         }
         return body.position.y >= SETTLE_MIN_Y;
       }
 
-      function getSettleThresholds(body) {
-        if (isOutsideJarX(body.position.x, body.position.y)) {
-          return { speed: SETTLE_SPEED_SPILL, idleMs: SETTLE_IDLE_MS_SPILL };
-        }
-        return { speed: SETTLE_SPEED_INSIDE, idleMs: SETTLE_IDLE_MS_INSIDE };
+      function isReadyToFreeze(body) {
+        if (!canSettleGift(body)) return false;
+        const age = Date.now() - (body.spawnTime || 0);
+        return age >= getFreezeIdleMs(body);
       }
 
       function freezeGift(body) {
@@ -320,14 +372,23 @@
         body.lastNudgeTime = Date.now();
       }
 
+      function canForceFreeze(body) {
+        return isReadyToFreeze(body);
+      }
+
       function enforceDynamicLimit() {
         const dynamic = getGiftBodies().filter((b) => b.label === 'gift');
         if (dynamic.length <= MAX_DYNAMIC_GIFTS) return;
 
         let excess = dynamic.length - MAX_DYNAMIC_GIFTS;
         const settled = dynamic
-          .filter(canSettleGift)
-          .sort((a, b) => b.position.y - a.position.y);
+          .filter(canForceFreeze)
+          .sort((a, b) => {
+            const aSpill = isSpilledGift(a);
+            const bSpill = isSpilledGift(b);
+            if (aSpill !== bSpill) return aSpill ? 1 : -1;
+            return b.position.y - a.position.y;
+          });
 
         for (let i = 0; i < settled.length && excess > 0; i++) {
           freezeGift(settled[i]);
@@ -374,18 +435,35 @@
         return img;
       }
 
+      function getSpawnYBonus() {
+        const gifts = getGiftBodies();
+        if (!gifts.length) return 0;
+
+        let highestTop = Infinity;
+        gifts.forEach((body) => {
+          const top = body.position.y - (body.circleRadius || 12);
+          if (top < highestTop) highestTop = top;
+        });
+
+        if (highestTop <= ESCAPE_TOP_Y + SPAWN_NEAR_TOP_MARGIN) {
+          return SPAWN_LOWER_BONUS_Y;
+        }
+        return 0;
+      }
+
       function createGift(data) {
         const diamonds = Number(data.diamonds) || 1;
         const radius = giftRadius(diamonds);
         const x = JAR.centerX + (Math.random() - 0.5) * JAR.mouthHalfWidth * 1.6;
         const spawnLift = JAR.mouthY * 0.1;
-        const y = JAR.mouthY - spawnLift - Math.random() * 14 - Math.max(0, radius - 12);
+        const y = JAR.mouthY - spawnLift - Math.random() * 14
+          - Math.max(0, radius - 12) + getSpawnYBonus();
 
         const gift = Bodies.circle(x, y, radius, {
-          restitution: 0.38,
-          friction: 0.28,
-          frictionStatic: 0.32,
-          frictionAir: 0.012,
+          restitution: 0.2,
+          friction: 0.3,
+          frictionStatic: 0.36,
+          frictionAir: 0.009,
           density: 0.0009 * (14 / radius),
           slop: 0.02,
           render: {
@@ -412,31 +490,19 @@
         enforceDynamicLimit();
       }
 
-      function removeFallenGifts() {
+      function removeEscapedGifts() {
         const gifts = getGiftBodies();
-        const fallen = gifts.filter((b) => b.position.y > FALLEN_Y);
-        if (fallen.length) World.remove(engine.world, fallen);
-      }
-
-      function trackGiftMotion() {
-        const now = Date.now();
-        getGiftBodies().forEach((body) => {
-          if (body.label !== 'gift' || body.isStatic) return;
-          if (body.speed >= 0.18) {
-            body.lastMoveTime = now;
-          }
+        const escaped = gifts.filter((b) => {
+          const radius = b.circleRadius || 12;
+          return b.position.y > FALLEN_Y || b.position.y - radius < ESCAPE_TOP_Y;
         });
+        if (escaped.length) World.remove(engine.world, escaped);
       }
 
       function settleIdleGifts() {
-        const now = Date.now();
         getGiftBodies().forEach((body) => {
           if (body.label !== 'gift' || body.isStatic) return;
-          if (!canSettleGift(body)) return;
-
-          const { speed, idleMs } = getSettleThresholds(body);
-          const idleFor = now - (body.lastMoveTime || body.spawnTime || 0);
-          if (body.speed < speed && idleFor > idleMs) {
+          if (isReadyToFreeze(body)) {
             freezeGift(body);
           }
         });
@@ -444,8 +510,26 @@
 
       function shouldThawFrozenGift(body) {
         if (body.position.y < SETTLE_MIN_Y) return true;
-        if (isOutsideJarX(body.position.x, body.position.y) && !isOnSpillFloor(body)) return true;
+        if (isSpilledGift(body) && !isOnSpillFloor(body)) return true;
         return false;
+      }
+
+      function assistSpillFlow() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (!isSpilledGift(body) || isOnSpillFloor(body)) return;
+
+          const feetY = body.position.y + (body.circleRadius || 12);
+          if (feetY >= SPILL_FLOOR_Y - 6) return;
+          if (body.speed > 0.42 && body.velocity.y > 0.65) return;
+
+          const towardLeft = body.position.x < JAR.centerX;
+          Body.setVelocity(body, {
+            x: body.velocity.x + (towardLeft ? -0.5 : 0.5),
+            y: Math.max(body.velocity.y, 1.8 + Math.random() * 0.7)
+          });
+          body.lastNudgeTime = Date.now();
+        });
       }
 
       function relieveNeckJam() {
@@ -458,22 +542,22 @@
           }
 
           if (body.label !== 'gift' || body.isStatic) return;
-          if (body.position.y >= SETTLE_MIN_Y) return;
 
           const lastNudge = body.lastNudgeTime || body.spawnTime || 0;
           const stuckFor = now - lastNudge;
-          const inNeck = body.position.y >= NECK_NUDGE_Y;
 
-          if (body.speed < 0.28 && stuckFor > (inNeck ? 500 : 900)) {
-            Body.setVelocity(body, {
-              x: (Math.random() - 0.5) * 1.1,
-              y: Math.max(body.velocity.y, 2.8 + Math.random() * 1.4)
-            });
-            Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.35);
-            body.lastNudgeTime = now;
-          } else if (body.speed >= 0.35) {
-            body.lastMoveTime = now;
-            body.lastNudgeTime = now;
+          if (body.position.y < SETTLE_MIN_Y) {
+            const inNeck = body.position.y >= NECK_NUDGE_Y;
+            if (body.speed < 0.28 && stuckFor > (inNeck ? 500 : 900)) {
+              Body.setVelocity(body, {
+                x: (Math.random() - 0.5) * 1.1,
+                y: Math.max(body.velocity.y, 2.8 + Math.random() * 1.4)
+              });
+              Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.35);
+              body.lastNudgeTime = now;
+            } else if (body.speed >= 0.35) {
+              body.lastNudgeTime = now;
+            }
           }
         });
       }
@@ -515,15 +599,17 @@
       });
 
       Events.on(engine, 'sleepStart', (event) => {
-        if (event.body && event.body.label === 'gift' && canSettleGift(event.body)) {
-          freezeGift(event.body);
+        const body = event.body;
+        if (!body || body.label !== 'gift') return;
+        if (isReadyToFreeze(body)) {
+          freezeGift(body);
         }
       });
 
       Events.on(engine, 'beforeUpdate', () => {
-        removeFallenGifts();
+        removeEscapedGifts();
         relieveNeckJam();
-        trackGiftMotion();
+        assistSpillFlow();
         settleIdleGifts();
       });
 

@@ -1,21 +1,23 @@
 const STAGE_CENTER_X = 230;
 
+// จูนจาก *-marking.png (960×1072) → stage 460×620, object-fit:contain
+// jar1/jar6 = jar1and6-marking | jar4 = jar4-marking | jar5 = jar5-marking
 const JAR_CONFIGS = {
   jar1: {
     label: 'โถแก้ว Mason (jar1)',
     image: '/images/jar1.png',
     physics: {
       centerX: STAGE_CENTER_X,
-      floorY: 528,
-      innerLeft: 98,
-      innerRight: 362,
-      wallTopY: 218,
+      floorY: 541,
+      innerLeft: 113,
+      innerRight: 358,
+      wallTopY: 220,
       mouthY: 88,
-      mouthHalfWidth: 54,
-      neckInset: 22,
-      floorWidth: 278,
-      wallHeight: 210,
-      wallCenterY: 422
+      mouthHalfWidth: 53,
+      neckInset: 19,
+      floorWidth: 198,
+      wallHeight: 242,
+      wallCenterY: 421
     },
     classic: {
       giftsBottom: 95,
@@ -34,23 +36,23 @@ const JAR_CONFIGS = {
     physics: {
       wallStyle: 'bulbous',
       centerX: STAGE_CENTER_X,
-      floorY: 534,
-      innerLeft: 110,
-      innerRight: 350,
-      upperInnerLeft: 74,
-      upperInnerRight: 386,
-      bulgeSplitY: 352,
-      floorWidth: 232,
-      wallTopY: 188,
+      floorY: 535,
+      innerLeft: 100,
+      innerRight: 371,
+      upperInnerLeft: 62,
+      upperInnerRight: 406,
+      bulgeSplitY: 392,
+      floorWidth: 199,
+      wallTopY: 151,
       mouthY: 62,
       mouthHalfWidth: 78,
-      lowerWallCenterY: 450,
-      lowerWallHeight: 158,
+      lowerWallCenterY: 463,
+      lowerWallHeight: 147,
       upperWallCenterY: 272,
-      upperWallHeight: 178,
+      upperWallHeight: 241,
       neckInset: 0,
-      wallHeight: 158,
-      wallCenterY: 450
+      wallHeight: 147,
+      wallCenterY: 463
     },
     classic: {
       giftsBottom: 90,
@@ -68,16 +70,16 @@ const JAR_CONFIGS = {
     image: '/images/jar5.png',
     physics: {
       centerX: STAGE_CENTER_X,
-      floorY: 542,
-      innerLeft: 114,
-      innerRight: 346,
-      wallTopY: 198,
+      floorY: 544,
+      innerLeft: 86,
+      innerRight: 382,
+      wallTopY: 205,
       mouthY: 72,
-      mouthHalfWidth: 66,
-      neckInset: 12,
-      floorWidth: 246,
-      wallHeight: 188,
-      wallCenterY: 432
+      mouthHalfWidth: 52,
+      neckInset: 46,
+      floorWidth: 178,
+      wallHeight: 272,
+      wallCenterY: 409
     },
     classic: {
       giftsBottom: 82,
@@ -95,16 +97,16 @@ const JAR_CONFIGS = {
     image: '/images/jar6.png',
     physics: {
       centerX: STAGE_CENTER_X,
-      floorY: 526,
-      innerLeft: 108,
-      innerRight: 352,
-      wallTopY: 214,
+      floorY: 541,
+      innerLeft: 113,
+      innerRight: 358,
+      wallTopY: 220,
       mouthY: 84,
-      mouthHalfWidth: 52,
-      neckInset: 22,
-      floorWidth: 268,
-      wallHeight: 208,
-      wallCenterY: 418
+      mouthHalfWidth: 53,
+      neckInset: 19,
+      floorWidth: 198,
+      wallHeight: 242,
+      wallCenterY: 421
     },
     classic: {
       giftsBottom: 92,

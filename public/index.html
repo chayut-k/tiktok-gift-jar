@@ -15,6 +15,12 @@
       margin: 0;
     }
     .container { max-width: 560px; margin: 0 auto; }
+    #dashboardPage.container {
+      max-width: 1140px;
+      padding-left: 16px;
+      padding-right: 16px;
+      box-sizing: border-box;
+    }
     h1 { margin-bottom: 8px; color: #ff0050; font-size: 28px; }
     h2 { color: #ff0050; font-size: 18px; margin-top: 0; }
 
@@ -92,17 +98,63 @@
     .disconnected { background: #330000; color: #ff6666; border: 1px solid #cc0000; }
     .connecting { background: #332200; color: #ffcc66; border: 1px solid #cc9900; }
 
+    .overlay-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 4px;
+    }
     .overlay-item {
       background: #222;
-      padding: 8px 12px;
-      border-radius: 6px;
-      margin: 6px 0;
+      padding: 12px;
+      border-radius: 8px;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      font-size: 13px;
+      min-width: 0;
+      height: 100%;
+      box-sizing: border-box;
+      border: 1px solid #333;
+    }
+    .overlay-item-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      font-size: 14px;
+      align-items: flex-start;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    .overlay-item span { color: #aaa; font-family: monospace; word-break: break-all; }
+    .overlay-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .overlay-item-info strong {
+      display: block;
+      margin-bottom: 4px;
+      line-height: 1.35;
+    }
+    .overlay-item span {
+      color: #aaa;
+      font-family: monospace;
+      font-size: 11px;
+      word-break: break-all;
+      display: block;
+      line-height: 1.4;
+    }
+    .overlay-grid .physics-preview-wrap {
+      height: 200px;
+    }
+    .overlay-grid .physics-preview-scaler {
+      transform: scale(0.34);
+    }
+    .overlay-grid .jar-preview-inline {
+      min-height: 140px;
+    }
+    .overlay-grid .hearts-demo-preview {
+      min-height: 100px;
+    }
     .small-btn {
       padding: 4px 10px;
       font-size: 12px;
@@ -303,6 +355,25 @@
       text-align: left;
       line-height: 1.5;
     }
+
+    @media (max-width: 1080px) {
+      #dashboardPage.container { max-width: 800px; }
+      .overlay-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .overlay-grid .physics-preview-wrap { height: 240px; }
+      .overlay-grid .physics-preview-scaler { transform: scale(0.4); }
+    }
+
+    @media (max-width: 560px) {
+      #dashboardPage.container {
+        max-width: 100%;
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+      .overlay-grid { grid-template-columns: 1fr; }
+      .overlay-grid .physics-preview-wrap { height: 300px; }
+      .overlay-grid .physics-preview-scaler { transform: scale(0.48); }
+      .overlay-actions { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -324,7 +395,7 @@
     <div id="userInfo" class="status connected"></div>
 
     <div class="dashboard-warning">
-      ⚠️ <strong>สำคัญ:</strong> ต้องเปิดแท็บ Dashboard ค้างไว้ระหว่าง Live — เน็ตหลุดชั่วคราวระบบจะพยายามเชื่อมใหม่ (รอ ~45 วินาที) — ปิดแท็บนานเกิน 45 วินาทีจะตัดการเชื่อมต่อ
+      ⚠️ <strong>สำคัญ:</strong> เปิด Dashboard ค้างไว้ระหว่างไลฟ์ — กด「เชื่อมต่อ」ครั้งเดียว ระบบจะรอไลฟ์อัตโนมัติถ้ายังไม่ขึ้น — เน็ตหลุดชั่วคราวจะพยายามเชื่อมใหม่ — ปิดแท็บนานเกิน 45 วินาทีจะตัดการเชื่อมต่อ
     </div>
 
     <!-- Connection Status -->
@@ -351,7 +422,7 @@
       <h2>📺 Overlay URLs</h2>
       <button class="btn btn-primary" id="generateOverlaysBtn" type="button" style="margin-bottom:8px;" disabled>แสดง Overlay Links</button>
       <div id="overlay-box" style="display:none;">
-        <div id="urls"></div>
+        <div id="urls" class="overlay-grid"></div>
       </div>
       <div class="help" id="overlayHint" style="margin-top:8px;">เชื่อมต่อ TikTok ก่อนเพื่อแสดง Overlay Links</div>
     </div>
@@ -368,6 +439,7 @@
     let selectedGiftJar = 1;
     let selectedPhysicsJar = 'jar1';
     let selectedPhysicsShowCoins = 'show';
+    let selectedPinto = 'pinto2';
     let selectedPintoShowCoins = 'show';
     let selectedChatBg = 'dim';
     let selectedTopLikersBg = 'transparent';
@@ -393,6 +465,11 @@
       { id: 'jar4', image: '/images/jar4.png', label: 'โถแก้วมังกรทอง (jar4)' },
       { id: 'jar5', image: '/images/jar5.png', label: 'โถแก้วกลม (jar5)' },
       { id: 'jar6', image: '/images/jar6.png', label: 'โถแก้วแมว (jar6)' },
+    ];
+
+    const PINTO_OPTIONS = [
+      { id: 'pinto1', image: '/images/ปิ่นโต.png', label: 'ปิ่นโต (ดั้งเดิม)' },
+      { id: 'pinto2', image: '/images/ปิ่นโต2.png', label: 'ปิ่นโต 2 (ไก่)' },
     ];
 
     const BG_STYLE_OPTIONS = [
@@ -430,12 +507,16 @@
       }
       const savedPhysics = localStorage.getItem('tgj_selected_physics_jar');
       const savedPhysicsCoins = localStorage.getItem('tgj_physics_show_coins');
+      const savedPinto = localStorage.getItem('tgj_selected_pinto');
       const savedPintoCoins = localStorage.getItem('tgj_pinto_show_coins');
       if (savedPhysics && PHYSICS_JAR_OPTIONS.some((jar) => jar.id === savedPhysics)) {
         selectedPhysicsJar = savedPhysics;
       }
       if (COINS_DISPLAY_OPTIONS.some((opt) => opt.id === savedPhysicsCoins)) {
         selectedPhysicsShowCoins = savedPhysicsCoins;
+      }
+      if (savedPinto && PINTO_OPTIONS.some((pinto) => pinto.id === savedPinto)) {
+        selectedPinto = savedPinto;
       }
       if (COINS_DISPLAY_OPTIONS.some((opt) => opt.id === savedPintoCoins)) {
         selectedPintoShowCoins = savedPintoCoins;
@@ -628,7 +709,9 @@
     socket.on('status', (data) => {
       const keepUsername = data.reason === 'reconnecting'
         || data.reason === 'disconnected'
-        || data.reason === 'error';
+        || data.reason === 'error'
+        || data.reason === 'waiting_for_live'
+        || data.reason === 'stream_end';
 
       isConnected = !!data.connected;
       if (data.connected && data.username) {
@@ -640,17 +723,29 @@
       }
 
       const isReconnecting = data.reason === 'reconnecting';
-      updateConnectionStatus(data.connected, data.username || connectedUsername, isReconnecting);
+      const isWaiting = data.reason === 'waiting_for_live';
+      updateConnectionStatus(
+        data.connected,
+        data.username || connectedUsername,
+        isReconnecting,
+        isWaiting
+      );
       updateOverlayUI();
 
       if (data.reason === 'dashboard_closed') {
         showMessage('⚠️ การเชื่อมต่อ TikTok ถูกตัดเพราะปิด Dashboard', true);
+      } else if (data.reason === 'waiting_for_live') {
+        showMessage('⏳ รอขึ้นไลฟ์ — ระบบจะเชื่อมต่ออัตโนมัติเมื่อคุณเริ่มไลฟ์', false);
       } else if (data.reason === 'stream_end') {
-        showMessage('📴 Live จบแล้ว', false);
+        showMessage('📴 Live จบแล้ว — รอไลฟ์รอบถัดไปอัตโนมัติ', false);
+      } else if (data.reason === 'reconnect_exhausted') {
+        showMessage('⏳ กำลังรอไลฟ์อีกครั้ง...', false);
       } else if (data.reason === 'reconnecting') {
         showMessage(`🔄 กำลังเชื่อมต่อ TikTok ใหม่... (ครั้งที่ ${data.attempt || 1})`, false);
       } else if (data.reason === 'reconnected') {
         showMessage('✅ เชื่อมต่อ TikTok กลับมาแล้ว', false);
+      } else if (data.connected) {
+        showMessage('✅ เชื่อมต่อ TikTok สำเร็จ!', false);
       } else if (data.reason === 'disconnected' || data.reason === 'error') {
         showMessage('⚠️ TikTok หลุดชั่วคราว — กำลังพยายามเชื่อมใหม่...', false);
       }
@@ -754,10 +849,13 @@
       fetch('/api/status', { credentials: 'include' })
         .then(r => r.json())
         .then(status => {
+          if (status.username) connectedUsername = status.username;
           if (status.connected && status.username) {
             isConnected = true;
-            connectedUsername = status.username;
             updateConnectionStatus(true, status.username);
+          } else if (status.waitingForLive && status.username) {
+            isConnected = false;
+            updateConnectionStatus(false, status.username, false, true);
           }
           updateOverlayUI();
         })
@@ -788,10 +886,16 @@
         const data = await res.json();
 
         if (data.success) {
-          showMessage('✅ เชื่อมต่อสำเร็จ!', false);
-          isConnected = true;
           connectedUsername = tiktokUsername;
-          updateConnectionStatus(true, tiktokUsername);
+          if (data.waiting) {
+            isConnected = false;
+            updateConnectionStatus(false, tiktokUsername, false, true);
+            showMessage('⏳ ยังไม่ขึ้นไลฟ์ — ระบบจะเชื่อมต่ออัตโนมัติเมื่อคุณเริ่มไลฟ์', false);
+          } else {
+            isConnected = true;
+            updateConnectionStatus(true, tiktokUsername);
+            showMessage('✅ เชื่อมต่อสำเร็จ!', false);
+          }
           updateOverlayUI();
         } else {
           showMessage('❌ ' + (data.error || 'เชื่อมต่อล้มเหลว'), true);
@@ -845,17 +949,21 @@
       }
     }
 
-    function updateConnectionStatus(connected, username = '', connecting = false) {
+    function updateConnectionStatus(connected, username = '', connecting = false, waiting = false) {
       const statusEl = document.getElementById('connectStatus');
       const textEl = document.getElementById('statusText');
 
-      statusEl.className = 'status ' + (connected ? 'connected' : connecting ? 'connecting' : 'disconnected');
+      statusEl.className = 'status ' + (
+        connected ? 'connected' : (connecting || waiting) ? 'connecting' : 'disconnected'
+      );
 
-      let dotColor = connected ? '#00ff88' : connecting ? '#ffcc66' : '#ff6666';
+      let dotColor = connected ? '#00ff88' : (connecting || waiting) ? '#ffcc66' : '#ff6666';
       statusEl.querySelector('.status-dot').style.background = dotColor;
 
       if (connected && username) {
         textEl.textContent = `เชื่อมต่อกับ @${username} แล้ว`;
+      } else if (waiting && username) {
+        textEl.textContent = `รอ @${username} ขึ้นไลฟ์...`;
       } else if (connecting) {
         textEl.textContent = `กำลังเชื่อมต่อ @${username}...`;
       } else {
@@ -868,13 +976,13 @@
       const btn = document.getElementById('generateOverlaysBtn');
       const overlayBox = document.getElementById('overlay-box');
       const hint = document.getElementById('overlayHint');
-      const ready = isConnected && connectedUsername;
+      const ready = !!connectedUsername;
 
       btn.disabled = !ready;
       if (!ready) {
         overlayBox.style.display = 'none';
         document.getElementById('urls').replaceChildren();
-        hint.textContent = 'เชื่อมต่อ TikTok ก่อนเพื่อแสดง Overlay Links';
+        hint.textContent = 'กดเชื่อมต่อ TikTok ก่อนเพื่อแสดง Overlay Links (รอไลฟ์ก็ได้)';
       } else {
         hint.textContent = 'คัดลอกลิงก์ไปใส่ใน Browser Source ของ OBS (Background: Transparent)';
       }
@@ -1033,17 +1141,12 @@
     function createGiftJarOverlayItem() {
       const item = document.createElement('div');
       item.className = 'overlay-item';
-      item.style.flexDirection = 'column';
-      item.style.alignItems = 'stretch';
 
       const top = document.createElement('div');
-      top.style.display = 'flex';
-      top.style.justifyContent = 'space-between';
-      top.style.alignItems = 'flex-start';
-      top.style.gap = '8px';
+      top.className = 'overlay-item-top';
 
       const info = document.createElement('div');
-      info.style.flex = '1';
+      info.className = 'overlay-item-info';
       info.innerHTML = `
         <strong>🫙 Gift Jar (แบบเดิม)</strong><br>
         <span id="giftJarLinkText">${getGiftJarUrl()}</span>
@@ -1111,14 +1214,24 @@
       return item;
     }
 
-    function getGiftPintoPhysicsUrl(coins = selectedPintoShowCoins) {
-      return buildOverlayUrl('/gift-pinto-physics.html', connectedUsername, { coins });
+    function getGiftPintoPhysicsUrl(
+      pintoId = selectedPinto,
+      coins = selectedPintoShowCoins
+    ) {
+      return buildOverlayUrl('/gift-pinto-physics.html', connectedUsername, {
+        pinto: pintoId,
+        coins
+      });
     }
 
-    function setPintoPreviewFrame(coins = selectedPintoShowCoins) {
+    function setPintoPreviewFrame(
+      pintoId = selectedPinto,
+      coins = selectedPintoShowCoins
+    ) {
       const frame = document.getElementById('pintoPhysicsPreview');
       if (!frame) return;
       const url = new URL('/gift-pinto-physics.html', window.location.origin);
+      url.searchParams.set('pinto', pintoId);
       url.searchParams.set('coins', coins);
       url.searchParams.set('preview', '1');
       frame.src = 'about:blank';
@@ -1133,6 +1246,19 @@
       setPintoPreviewFrame();
     }
 
+    function selectPintoVariant(pintoId) {
+      selectedPinto = pintoId;
+      localStorage.setItem('tgj_selected_pinto', pintoId);
+      const thumb = document.getElementById('pintoThumb');
+      if (thumb) {
+        const pinto = PINTO_OPTIONS.find((item) => item.id === pintoId);
+        if (pinto) thumb.src = pinto.image;
+      }
+      const select = document.getElementById('pintoSelect');
+      if (select) select.value = pintoId;
+      updatePintoPhysicsOverlay();
+    }
+
     function selectPintoCoinsDisplay(coinsId) {
       selectedPintoShowCoins = coinsId;
       localStorage.setItem('tgj_pinto_show_coins', coinsId);
@@ -1144,17 +1270,12 @@
     function createGiftPintoPhysicsOverlayItem() {
       const item = document.createElement('div');
       item.className = 'overlay-item';
-      item.style.flexDirection = 'column';
-      item.style.alignItems = 'stretch';
 
       const top = document.createElement('div');
-      top.style.display = 'flex';
-      top.style.justifyContent = 'space-between';
-      top.style.alignItems = 'flex-start';
-      top.style.gap = '8px';
+      top.className = 'overlay-item-top';
 
       const info = document.createElement('div');
-      info.style.flex = '1';
+      info.className = 'overlay-item-info';
       info.innerHTML = `
         <strong>🍱 Gift Pinto (ฟิสิกส์ 4 ชั้น) (อยู่ในช่วงทดลอง) </strong><br>
         <span id="giftPintoPhysicsLinkText">${getGiftPintoPhysicsUrl()}</span>
@@ -1185,9 +1306,49 @@
       const help = document.createElement('p');
       help.className = 'help';
       help.style.marginTop = '0';
-      help.textContent = 'เริ่มแสดงชั้นล่าง → ขยับชั้นเมื่อใกล้เต็ม → ชั้นบนเต็มแล้วของขวัญล้นออกข้าง (เลือกแสดง/ซ่อนยอดเหรียญได้ด้านล่าง)';
+      help.textContent = 'เริ่มชั้นล่าง → ขยับชั้นเมื่อเต็ม → ปิดฝาแล้วของขวัญกองบนฝา/พื้นล่าง';
+
+      const pickerLabel = document.createElement('label');
+      pickerLabel.textContent = 'เลือกรูปปิ่นโต';
+      pickerLabel.setAttribute('for', 'pintoSelect');
+
+      const controls = document.createElement('div');
+      controls.style.display = 'flex';
+      controls.style.gap = '10px';
+      controls.style.alignItems = 'center';
+      controls.style.marginBottom = '8px';
+
+      const pintoSelect = document.createElement('select');
+      pintoSelect.id = 'pintoSelect';
+      pintoSelect.className = 'jar-select';
+      pintoSelect.style.margin = '0';
+      PINTO_OPTIONS.forEach((pinto) => {
+        const option = document.createElement('option');
+        option.value = pinto.id;
+        option.textContent = pinto.label;
+        if (pinto.id === selectedPinto) option.selected = true;
+        pintoSelect.appendChild(option);
+      });
+      pintoSelect.addEventListener('change', () => selectPintoVariant(pintoSelect.value));
+
+      const thumb = document.createElement('img');
+      thumb.id = 'pintoThumb';
+      thumb.src = PINTO_OPTIONS.find((pinto) => pinto.id === selectedPinto)?.image || '/images/ปิ่นโต2.png';
+      thumb.alt = 'ตัวอย่างปิ่นโต';
+      thumb.style.width = '52px';
+      thumb.style.height = '68px';
+      thumb.style.objectFit = 'contain';
+      thumb.style.background = '#111';
+      thumb.style.borderRadius = '6px';
+      thumb.style.border = '1px solid #444';
+
+      controls.append(pintoSelect, thumb);
+
+      const coinsRow = document.createElement('div');
+      coinsRow.className = 'tlj-setting-row';
 
       const coinsLabel = document.createElement('label');
+      coinsLabel.className = 'tlj-row-label';
       coinsLabel.textContent = 'แสดงยอดเหรียญรวม';
       coinsLabel.setAttribute('for', 'pintoCoinsSelect');
 
@@ -1202,6 +1363,7 @@
         coinsSelect.appendChild(option);
       });
       coinsSelect.addEventListener('change', () => selectPintoCoinsDisplay(coinsSelect.value));
+      coinsRow.append(coinsLabel, coinsSelect);
 
       const previewCaption = document.createElement('p');
       previewCaption.className = 'preview-caption';
@@ -1221,28 +1383,24 @@
       scaler.appendChild(frame);
       previewWrap.appendChild(scaler);
 
-      pickerRow.append(help, coinsLabel, coinsSelect, previewWrap, previewCaption);
+      pickerRow.append(help, pickerLabel, controls, coinsRow, previewWrap, previewCaption);
       item.appendChild(pickerRow);
-      setPintoPreviewFrame(selectedPintoShowCoins);
+      updatePintoPhysicsOverlay();
       return item;
     }
 
     function createGiftJarPhysicsOverlayItem() {
       const item = document.createElement('div');
       item.className = 'overlay-item';
-      item.style.flexDirection = 'column';
-      item.style.alignItems = 'stretch';
 
       const top = document.createElement('div');
-      top.style.display = 'flex';
-      top.style.justifyContent = 'space-between';
-      top.style.alignItems = 'flex-start';
-      top.style.gap = '8px';
+      top.className = 'overlay-item-top';
 
       const info = document.createElement('div');
-      info.style.flex = '1';
+      info.className = 'overlay-item-info';
       info.innerHTML = `
-        <strong>🫙 Gift Jar (ฟิสิกส์) (โอ้ง(่jar4) สเกลอาจจะไม่ตรงเล็กน้อย)</strong><br>
+        <strong>🫙 Gift Jar (ฟิสิกส์)</strong><br>
+        <text>(ปล. โอ่งมังกร (่jar4) เมื่อของขวัญล้นออกมาอาจจะไม่ไหลลงด้านข้างแต่จะกองอยู่ด้านบน)</text><br>
         <span id="giftJarPhysicsLinkText">${getGiftJarPhysicsUrl()}</span>
       `;
 
@@ -1350,17 +1508,12 @@
 
       const item = document.createElement('div');
       item.className = 'overlay-item';
-      item.style.flexDirection = 'column';
-      item.style.alignItems = 'stretch';
 
       const top = document.createElement('div');
-      top.style.display = 'flex';
-      top.style.justifyContent = 'space-between';
-      top.style.alignItems = 'flex-start';
-      top.style.gap = '8px';
+      top.className = 'overlay-item-top';
 
       const info = document.createElement('div');
-      info.style.flex = '1';
+      info.className = 'overlay-item-info';
       info.innerHTML = `
         <strong>❤️ Like Hearts</strong><br>
         <span id="likeHeartsLinkText">${getUrl()}</span>
@@ -1420,17 +1573,12 @@
 
       const item = document.createElement('div');
       item.className = 'overlay-item';
-      item.style.flexDirection = 'column';
-      item.style.alignItems = 'stretch';
 
       const top = document.createElement('div');
-      top.style.display = 'flex';
-      top.style.justifyContent = 'space-between';
-      top.style.alignItems = 'flex-start';
-      top.style.gap = '8px';
+      top.className = 'overlay-item-top';
 
       const info = document.createElement('div');
-      info.style.flex = '1';
+      info.className = 'overlay-item-info';
       info.innerHTML = `
         <strong>${name}</strong><br>
         <span id="${prefix}LinkText">${getUrl()}</span>
@@ -1534,17 +1682,12 @@
     function createTopLikersOverlayItem() {
       const item = document.createElement('div');
       item.className = 'overlay-item';
-      item.style.flexDirection = 'column';
-      item.style.alignItems = 'stretch';
 
       const top = document.createElement('div');
-      top.style.display = 'flex';
-      top.style.justifyContent = 'space-between';
-      top.style.alignItems = 'flex-start';
-      top.style.gap = '8px';
+      top.className = 'overlay-item-top';
 
       const info = document.createElement('div');
-      info.style.flex = '1';
+      info.className = 'overlay-item-info';
       info.innerHTML = `
         <strong>❤️ Top Likers</strong><br>
         <span id="topLikersLinkText">${getTopLikersUrl()}</span>
@@ -1661,13 +1804,15 @@
       const item = document.createElement('div');
       item.className = 'overlay-item';
       item.innerHTML = `
-        <div>
-          <strong>${overlay.name}</strong><br>
-          <span>${full}</span>
-        </div>
-        <div class="overlay-actions">
-          <button class="small-btn" type="button" data-action="copy">Copy</button>
-          <button class="small-btn" type="button" data-action="open">Open</button>
+        <div class="overlay-item-top">
+          <div class="overlay-item-info">
+            <strong>${overlay.name}</strong>
+            <span>${full}</span>
+          </div>
+          <div class="overlay-actions">
+            <button class="small-btn" type="button" data-action="copy">Copy</button>
+            <button class="small-btn" type="button" data-action="open">Open</button>
+          </div>
         </div>
       `;
       item.querySelector('[data-action="copy"]').addEventListener('click', (e) => copyToClipboard(full, e.currentTarget));
@@ -1677,7 +1822,7 @@
 
     function generateOverlays() {
       if (!isConnected || !connectedUsername) {
-        return showMessage('กรุณาเชื่อมต่อ TikTok ก่อน', true);
+        return showMessage('กรุณากดเชื่อมต่อ TikTok ก่อน', true);
       }
 
       const container = document.getElementById('overlay-box');
