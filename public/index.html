@@ -399,6 +399,23 @@
       <h2>เชื่อมต่อ TikTok LIVE</h2>
       <label>TikTok Username</label>
       <input type="text" id="tiktokUsername" placeholder="เช่น art_of_yut">
+
+      <details style="margin-top: 12px;">
+        <summary style="cursor:pointer;color:#666;font-size:14px;">ตั้งค่าขั้นสูง (ถ้า TikTok บล็อกการเชื่อมต่อ)</summary>
+        <div style="margin-top:10px;">
+          <label>sessionid (cookie จาก TikTok)</label>
+          <input type="password" id="tiktokSessionId" placeholder="คัดลอกจาก DevTools → Application → Cookies" autocomplete="off">
+          <label style="margin-top:8px;">tt-target-idc (cookie จาก TikTok)</label>
+          <input type="text" id="tiktokTargetIdc" placeholder="เช่น useast1a, alisg" autocomplete="off">
+          <p class="help" style="margin-top:8px;">Login TikTok ในเบราว์เซอร์ → F12 → Application → Cookies → tiktok.com → คัดลอกทั้งสองค่า (เก็บเป็นความลับ)</p>
+        </div>
+      </details>
+
+      <p class="help" style="margin-top:12px;">
+        ทดสอบ Physics โดยไม่ต้องเชื่อม TikTok:
+        <a href="/gift-jar-physics.html?jar=jar4&amp;preview=1" target="_blank" rel="noopener">เปิด jar4 Preview</a>
+        (กด G/H/J เพิ่มของขวัญ, R รีเซ็ต)
+      </p>
       
       <div style="margin-top: 10px;">
         <button class="btn btn-primary" id="connectBtn" type="button">เชื่อมต่อ</button>
@@ -939,6 +956,12 @@
       if (user.tiktokUsername) {
         document.getElementById('tiktokUsername').value = user.tiktokUsername;
       }
+      if (user.sessionId) {
+        document.getElementById('tiktokSessionId').value = user.sessionId;
+      }
+      if (user.ttTargetIdc) {
+        document.getElementById('tiktokTargetIdc').value = user.ttTargetIdc;
+      }
 
       loadSavedJarPreference();
       loadSavedBgPreferences();
@@ -988,6 +1011,16 @@
       }
     }
 
+    function getTikTokConnectPayload(tiktokUsername) {
+      const payload = { tiktokUsername };
+      const sessionId = document.getElementById('tiktokSessionId')?.value.trim();
+      const ttTargetIdc = document.getElementById('tiktokTargetIdc')?.value.trim();
+      if (sessionId) payload.sessionId = sessionId;
+      if (ttTargetIdc) payload.ttTargetIdc = ttTargetIdc;
+      if (currentUser?.email) payload.email = currentUser.email;
+      return payload;
+    }
+
     // ================== TikTok Connection ==================
     async function connectTikTok() {
       const tiktokUsername = document.getElementById('tiktokUsername').value.trim();
@@ -1008,10 +1041,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            email: currentUser.email,
-            tiktokUsername,
-          })
+          body: JSON.stringify(getTikTokConnectPayload(tiktokUsername))
         });
         const data = await res.json();
 
@@ -1051,10 +1081,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          email: currentUser.email,
-          tiktokUsername,
-        })
+        body: JSON.stringify(getTikTokConnectPayload(tiktokUsername))
       })
       .then(r => r.json())
       .then(data => {

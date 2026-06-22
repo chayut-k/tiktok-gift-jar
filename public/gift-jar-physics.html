@@ -15,7 +15,19 @@
       font-family: Arial, sans-serif;
     }
     body.preview-mode .stage { margin: 0; }
-    body.preview-mode .below-stage { display: none; }
+    body.preview-mode .below-stage {
+      display: block;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 8px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    body.preview-mode .test-hint {
+      color: #ccc;
+      text-shadow: 0 1px 4px #000;
+    }
     .stage {
       position: relative;
       width: 460px;
@@ -140,10 +152,10 @@
 
       const engine = Engine.create({
         enableSleeping: true,
-        positionIterations: 10,
-        velocityIterations: 8
+        positionIterations: jarId === 'jar4' ? 14 : 10,
+        velocityIterations: jarId === 'jar4' ? 10 : 8
       });
-      engine.gravity.y = 1.22;
+      engine.gravity.y = jarId === 'jar4' ? 1.15 : 1.22;
 
       const render = Render.create({
         element: document.getElementById('physics-layer'),
@@ -287,12 +299,37 @@
         const botBulgeLeft = wall((midLeft + botLeft) / 2 + 7, botBulgeCY, 14, botBulgeH);
         const botBulgeRight = wall((midRight + botRight) / 2 - 7, botBulgeCY, 14, botBulgeH);
 
-        const taperH = s.taperBottomY - s.bulgeBottomY + 24;
+        const taperH = s.taperBottomY - s.bulgeBottomY + 10;
         const taperCY = (s.bulgeBottomY + s.taperBottomY) / 2;
-        const taperLeft = wall((s.taperLeft + botLeft) / 2, taperCY, 14, taperH, 0.38);
-        const taperRight = wall((s.taperRight + botRight) / 2, taperCY, 14, taperH, -0.38);
+        const taperLeft = wall(s.taperLeft + 7, taperCY, 14, taperH, 0.32);
+        const taperRight = wall(s.taperRight - 7, taperCY, 14, taperH, -0.32);
 
-        const floorCorners = buildFloorCornerWalls(s.floorLeft, s.floorRight);
+        const bottomH = JAR.floorY - s.taperBottomY + 14;
+        const bottomCY = (s.taperBottomY + JAR.floorY) / 2;
+        const bottomLeft = wall(s.floorLeft + 7, bottomCY, 14, bottomH, 0.52);
+        const bottomRight = wall(s.floorRight - 7, bottomCY, 14, bottomH, -0.52);
+
+        const cornerH = 48;
+        const cornerCY = s.taperBottomY + 2;
+        const leftCorner = wall((s.taperLeft + s.floorLeft) / 2 + 2, cornerCY, 14, cornerH, 0.78);
+        const rightCorner = wall((s.taperRight + s.floorRight) / 2 - 2, cornerCY, 14, cornerH, -0.78);
+
+        const lowerCornerH = 34;
+        const lowerCornerCY = JAR.floorY - 14;
+        const leftLowerCorner = wall(s.floorLeft + 16, lowerCornerCY, 12, lowerCornerH, 1.05);
+        const rightLowerCorner = wall(s.floorRight - 16, lowerCornerCY, 12, lowerCornerH, -1.05);
+
+        const lipY = JAR.floorY + 1;
+        const lipLeft = wall(s.floorLeft + 18, lipY, 32, 8, 0.82);
+        const lipRight = wall(s.floorRight - 18, lipY, 32, 8, -0.82);
+
+        floor.friction = 0.72;
+        floor.restitution = 0;
+        [bottomLeft, bottomRight, leftCorner, rightCorner, leftLowerCorner, rightLowerCorner, lipLeft, lipRight]
+          .forEach((segment) => {
+            segment.friction = 0.62;
+            segment.restitution = 0;
+          });
 
         setJarWallFriction(
           mouthLeftWall, mouthRightWall, neckLeft, neckRight,
@@ -302,8 +339,8 @@
         return [
           floor, mouthLeftWall, mouthRightWall, neckLeft, neckRight,
           topBulgeLeft, topBulgeRight, midBulgeLeft, midBulgeRight, botBulgeLeft, botBulgeRight,
-          taperLeft, taperRight,
-          ...floorCorners
+          taperLeft, taperRight, bottomLeft, bottomRight,
+          leftCorner, rightCorner, leftLowerCorner, rightLowerCorner, lipLeft, lipRight,
         ];
       }
 
@@ -439,8 +476,42 @@
         return x < bounds.left - margin || x > bounds.right + margin;
       }
 
+      function isJar4BottomZone(y) {
+        const s = JAR.segments;
+        return y >= (s?.taperBottomY ?? JAR.floorY - 40) - 12;
+      }
+
+      function isNearJar4Floor(body) {
+        const radius = body.circleRadius || 12;
+        return body.position.y + radius >= JAR.floorY - 20;
+      }
+
+      function isJar4InsideX(body, y = body.position.y) {
+        const radius = body.circleRadius || 12;
+        const bounds = getJarInnerXAtY(Math.min(y, JAR.floorY));
+        return body.position.x >= bounds.left + radius - 4
+          && body.position.x <= bounds.right - radius + 4;
+      }
+
+      function isJar4AccidentalBottomLeak(body) {
+        if (!isJar4BottomZone(body.position.y)) return false;
+        if (isOnSpillFloor(body) || isSpilledGift(body)) return false;
+
+        const radius = body.circleRadius || 12;
+        if (!isJar4InsideX(body)) return false;
+
+        return body.position.y + radius > JAR.floorY - 1;
+      }
+
       function isSpilledOutsideJar(x, y = JAR.floorY) {
         if (jarId === 'jar4' && JAR.segments) {
+          // ของที่หลุดก้นโถไม่ใช่ spill ปกติ — ให้ recover แยกต่างหาก
+          if (isJar4BottomZone(y)) {
+            const margin = 4;
+            const bounds = getJarInnerXAtY(Math.min(y, JAR.floorY));
+            return x < bounds.left - margin || x > bounds.right + margin;
+          }
+
           const margin = 6;
           const bounds = getJarInnerXAtY(y);
           if (x < bounds.left - margin || x > bounds.right + margin) return true;
@@ -469,6 +540,9 @@
       }
 
       function getFreezeIdleMs(body) {
+        if (jarId === 'jar4' && isNearJar4Floor(body) && !isSpilledGift(body)) {
+          return 2800;
+        }
         return isSpilledGift(body) ? SETTLE_IDLE_MS_SPILL : SETTLE_IDLE_MS_INSIDE;
       }
 
@@ -476,6 +550,9 @@
         if (!body) return false;
         if (isSpilledGift(body)) {
           return isOnSpillFloor(body);
+        }
+        if (jarId === 'jar4' && isNearJar4Floor(body)) {
+          return body.speed < 2.4;
         }
         return body.position.y >= SETTLE_MIN_Y;
       }
@@ -600,13 +677,14 @@
         const y = spawnY - spawnLift - Math.random() * spawnJitter
           - Math.max(0, radius - 12) + getSpawnYBonus();
 
+        const jar4Gift = jarId === 'jar4';
         const gift = Bodies.circle(x, y, radius, {
-          restitution: 0.2,
-          friction: 0.3,
-          frictionStatic: 0.36,
-          frictionAir: 0.009,
+          restitution: jar4Gift ? 0.05 : 0.2,
+          friction: jar4Gift ? 0.42 : 0.3,
+          frictionStatic: jar4Gift ? 0.5 : 0.36,
+          frictionAir: jar4Gift ? 0.012 : 0.009,
           density: 0.0009 * (14 / radius),
-          slop: 0.02,
+          slop: jar4Gift ? 0.01 : 0.02,
           render: {
             fillStyle: 'transparent',
             strokeStyle: 'transparent',
@@ -676,6 +754,64 @@
         });
       }
 
+      function recoverJar4BottomLeaks() {
+        const floorY = JAR.floorY;
+        const maxFeetY = floorY - 1;
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (!isJar4AccidentalBottomLeak(body)) return;
+
+          const radius = body.circleRadius || 12;
+          Body.setPosition(body, {
+            x: body.position.x,
+            y: maxFeetY - radius,
+          });
+          Body.setVelocity(body, {
+            x: body.velocity.x * 0.18,
+            y: Math.min(body.velocity.y * 0.15, 0.2),
+          });
+          body.lastNudgeTime = Date.now();
+        });
+      }
+
+      function stabilizeJar4BottomStack() {
+        const floorY = JAR.floorY;
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isSpilledGift(body) || isOnSpillFloor(body)) return;
+          if (!isJar4BottomZone(body.position.y)) return;
+          if (!isJar4InsideX(body)) return;
+
+          const radius = body.circleRadius || 12;
+          const feetY = body.position.y + radius;
+
+          if (body.speed > 2.2) {
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.52,
+              y: body.velocity.y * 0.38,
+            });
+            body.lastNudgeTime = Date.now();
+          }
+
+          if (feetY < floorY - 28) return;
+
+          if (Math.abs(body.velocity.x) > 1.4 && feetY > floorY - 16) {
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.45,
+              y: body.velocity.y,
+            });
+            body.lastNudgeTime = Date.now();
+          }
+
+          if (feetY > floorY - 3 && body.speed < 0.9 && isReadyToFreeze(body)) {
+            Body.setPosition(body, { x: body.position.x, y: floorY - radius - 2 });
+            freezeGift(body);
+          }
+        });
+      }
+
       function assistJar4SpillFlow() {
         const s = JAR.segments;
         const topSpillY = JAR_SPILL?.topSpillY ?? s.neckTopY + 8;
@@ -692,7 +828,10 @@
           const spilled = outsideX || isSpilledGift(body);
 
           if (spilled) {
-            if (body.speed > 0.65 && body.velocity.y > 1.2) return;
+            const radius = body.circleRadius || 12;
+            const feetY = y + radius;
+            if (feetY >= SPILL_FLOOR_Y - 8) return;
+            if (body.speed > 0.65 && body.velocity.y > 1.2 && y < JAR.floorY) return;
 
             const slideDir = x < JAR.centerX ? -1 : 1;
             Body.setVelocity(body, {
@@ -793,6 +932,32 @@
         updateRenderQuality();
       });
 
+      Events.on(engine, 'collisionStart', (event) => {
+        if (jarId !== 'jar4') return;
+
+        const bottomY = JAR.floorY - 75;
+        event.pairs.forEach((pair) => {
+          let giftA = pair.bodyA;
+          let giftB = pair.bodyB;
+          if (giftA.label !== 'gift' && giftB.label !== 'gift') return;
+          if (giftA.label !== 'gift') [giftA, giftB] = [giftB, giftA];
+          if (giftB.label !== 'gift') return;
+          if (giftA.position.y < bottomY && giftB.position.y < bottomY) return;
+
+          [giftA, giftB].forEach((body) => {
+            if (body.label !== 'gift' || body.isStatic) return;
+            if (isSpilledGift(body) || isOnSpillFloor(body)) return;
+            if (!isJar4InsideX(body)) return;
+            if (body.speed < 1.2) return;
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.58,
+              y: body.velocity.y * 0.35,
+            });
+            body.lastNudgeTime = Date.now();
+          });
+        });
+      });
+
       Events.on(engine, 'sleepStart', (event) => {
         const body = event.body;
         if (!body || body.label !== 'gift') return;
@@ -804,7 +969,11 @@
       Events.on(engine, 'beforeUpdate', () => {
         removeEscapedGifts();
         relieveNeckJam();
-        if (jarId === 'jar4') assistJar4SpillFlow();
+        if (jarId === 'jar4') {
+          recoverJar4BottomLeaks();
+          stabilizeJar4BottomStack();
+          assistJar4SpillFlow();
+        }
         else assistSpillFlow();
         settleIdleGifts();
       });
@@ -850,8 +1019,8 @@
         const previewTimer = setInterval(() => {
           spawnTestGift(previewSizes[previewCount % previewSizes.length]);
           previewCount++;
-          if (previewCount >= 18) clearInterval(previewTimer);
-        }, 800);
+          if (previewCount >= 24) clearInterval(previewTimer);
+        }, 500);
       }
 
       Render.run(render);

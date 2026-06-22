@@ -243,17 +243,34 @@ function createStreamState(email) {
   };
 }
 
-function getTikTokConnectionOptions(sessionId) {
+function getTikTokCredentials(email) {
+  const saved = email ? users[email] || {} : {};
+  return {
+    sessionId: saved.sessionId || process.env.TIKTOK_SESSION_ID || null,
+    ttTargetIdc: saved.ttTargetIdc || process.env.TIKTOK_TT_TARGET_IDC || null,
+  };
+}
+
+function getTikTokConnectionOptions(email) {
+  const { sessionId, ttTargetIdc } = getTikTokCredentials(email);
   const options = {
     enableExtendedGiftInfo: true,
     processInitialData: false,
+    connectWithUniqueId: true,
+    fetchRoomInfoOnConnect: false,
   };
+
   if (sessionId) options.sessionId = sessionId;
+  if (ttTargetIdc) options.ttTargetIdc = ttTargetIdc;
+
+  const signApiKey = process.env.TIKTOK_SIGN_API_KEY || process.env.EULER_API_KEY;
+  if (signApiKey) options.signApiKey = signApiKey;
+
   return options;
 }
 
-async function probeIsLive(tiktokUsername, sessionId = null) {
-  const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(sessionId));
+async function probeIsLive(tiktokUsername, email = null) {
+  const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(email));
   return conn.fetchIsLive();
 }
 
@@ -274,16 +291,14 @@ async function pollWaitForLive(email) {
     return;
   }
 
-  const sessionId = users[email]?.sessionId || null;
-
   try {
-    const isLive = await probeIsLive(stream.tiktokUsername, sessionId);
+    const isLive = await probeIsLive(stream.tiktokUsername, email);
     if (!stream.waitingForLive) return;
 
     if (isLive) {
       console.log(`📡 [${email}] Live detected — connecting @${stream.tiktokUsername}`);
       stopWaitForLive(stream);
-      await startTikTokConnectionForUser(email, stream.tiktokUsername, sessionId);
+      await startTikTokConnectionForUser(email, stream.tiktokUsername);
       return;
     }
   } catch (err) {
@@ -533,8 +548,6 @@ async function tryAutoConnectOnDashboardOpen(email) {
   if (stream.autoConnectInFlight) return;
 
   stream.autoConnectInFlight = true;
-  const sessionId = users[email]?.sessionId || null;
-
   console.log(`🔁 [${email}] Dashboard reopened — auto-connect @${savedUsername}`);
   emitStreamStatus(email, false, {
     reason: 'auto_connecting',
@@ -543,7 +556,7 @@ async function tryAutoConnectOnDashboardOpen(email) {
   });
 
   try {
-    await connectOrWaitForLive(email, savedUsername, sessionId);
+    await connectOrWaitForLive(email, savedUsername);
   } catch (err) {
     console.error(`Auto-connect failed [${email}]:`, err.message || err);
     emitStreamStatus(email, false, {
@@ -919,7 +932,7 @@ function prepareStreamUsername(email, tiktokUsername) {
   return stream;
 }
 
-async function connectOrWaitForLive(email, tiktokUsername, sessionId = null) {
+async function connectOrWaitForLive(email, tiktokUsername) {
   if (!tiktokUsername) throw new Error('TikTok Username หายไป');
 
   touchDashboardHttpPresence(email);
@@ -938,7 +951,7 @@ async function connectOrWaitForLive(email, tiktokUsername, sessionId = null) {
 
   let isLive = false;
   try {
-    isLive = await probeIsLive(tiktokUsername, sessionId);
+    isLive = await probeIsLive(tiktokUsername, email);
   } catch (err) {
     console.warn(`Live probe failed [${email}]:`, err.message || err);
   }
@@ -948,7 +961,7 @@ async function connectOrWaitForLive(email, tiktokUsername, sessionId = null) {
     return { mode: 'waiting' };
   }
 
-  await startTikTokConnectionForUser(email, tiktokUsername, sessionId);
+  await startTikTokConnectionForUser(email, tiktokUsername);
   return { mode: 'connected' };
 }
 
@@ -962,14 +975,13 @@ async function reconnectTikTokConnectionForUser(email) {
   }
 
   const tiktokUsername = stream.tiktokUsername;
-  const sessionId = users[email]?.sessionId || null;
 
   const connectTask = (async () => {
     stopWaitForLive(stream);
     stopTikTokConnection(stream);
 
     const connectionId = stream.activeConnectionId;
-    const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(sessionId));
+    const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(email));
     stream.connection = conn;
     attachTikTokListeners(conn, email, connectionId);
 
@@ -991,7 +1003,7 @@ async function reconnectTikTokConnectionForUser(email) {
   }
 }
 
-async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = null) {
+async function startTikTokConnectionForUser(email, tiktokUsername) {
   if (!tiktokUsername) throw new Error('TikTok Username หายไป');
 
   const stream = getOrCreateStream(email);
@@ -1009,7 +1021,7 @@ async function startTikTokConnectionForUser(email, tiktokUsername, sessionId = n
     stream.reconnectAttempt = 0;
 
     const connectionId = stream.activeConnectionId;
-    const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(sessionId));
+    const conn = new TikTokLiveConnection(tiktokUsername, getTikTokConnectionOptions(email));
     stream.connection = conn;
     attachTikTokListeners(conn, email, connectionId);
 
@@ -1100,8 +1112,8 @@ function mapTikTokError(err) {
   if (msg.includes('user_not_found')) {
     return 'ไม่พบผู้ใช้ TikTok นี้ หรือยังไม่ได้เปิดไลฟ์';
   }
-  if (msg.includes('blocked') || msg.includes('SIGI')) {
-    return 'ถูกบล็อกชั่วคราวจาก TikTok ลองรอสักครู่';
+  if (msg.includes('blocked') || msg.includes('SIGI') || msg.includes('Room ID')) {
+    return 'TikTok บล็อกการเชื่อมต่อชั่วคราว — ลองใส่ sessionid + tt-target-idc ใน Dashboard หรือทดสอบ physics ด้วย ?preview=1';
   }
   return 'เชื่อมต่อไม่สำเร็จ';
 }
@@ -1138,6 +1150,7 @@ async function buildGoogleUserResponse(payload) {
   if (users[email]) {
     if (users[email].tiktokUsername) userData.tiktokUsername = users[email].tiktokUsername;
     if (users[email].sessionId) userData.sessionId = users[email].sessionId;
+    if (users[email].ttTargetIdc) userData.ttTargetIdc = users[email].ttTargetIdc;
     if (users[email].selectedJar) userData.selectedJar = users[email].selectedJar;
   }
 
@@ -1220,12 +1233,22 @@ app.post('/google-login', async (req, res) => {
   }
 });
 
+function saveTikTokUserCredentials(email, body) {
+  if (!users[email]) users[email] = {};
+  if (body?.sessionId) {
+    users[email].sessionId = String(body.sessionId).trim().slice(0, 200);
+  }
+  if (body?.ttTargetIdc) {
+    users[email].ttTargetIdc = String(body.ttTargetIdc).trim().slice(0, 64);
+  }
+  saveUsers();
+}
+
 // ================== Protected Actions ==================
 app.post('/connect-tiktok', connectLimiter, async (req, res) => {
   try {
     const email = getSessionEmail(req);
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
-    const sessionId = req.body?.sessionId ? String(req.body.sessionId).trim().slice(0, 200) : null;
 
     if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
     if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
@@ -1234,10 +1257,9 @@ app.post('/connect-tiktok', connectLimiter, async (req, res) => {
 
     if (!users[email]) users[email] = {};
     users[email].tiktokUsername = tiktokUsername;
-    if (sessionId) users[email].sessionId = sessionId;
-    saveUsers();
+    saveTikTokUserCredentials(email, req.body);
 
-    const result = await connectOrWaitForLive(email, tiktokUsername, sessionId);
+    const result = await connectOrWaitForLive(email, tiktokUsername);
     res.json({
       success: true,
       username: tiktokUsername,
@@ -1253,7 +1275,6 @@ app.post('/connect-tiktok', connectLimiter, async (req, res) => {
 app.post('/save-tiktok', connectLimiter, async (req, res) => {
   try {
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
-    const sessionId = req.body?.sessionId ? String(req.body.sessionId).trim().slice(0, 200) : null;
     const email = sanitizeEmail(req.body?.email) || getSessionEmail(req);
 
     if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
@@ -1263,10 +1284,9 @@ app.post('/save-tiktok', connectLimiter, async (req, res) => {
 
     if (!users[email]) users[email] = {};
     users[email].tiktokUsername = tiktokUsername;
-    if (sessionId) users[email].sessionId = sessionId;
-    saveUsers();
+    saveTikTokUserCredentials(email, req.body);
 
-    const result = await connectOrWaitForLive(email, tiktokUsername, sessionId);
+    const result = await connectOrWaitForLive(email, tiktokUsername);
     res.json({
       success: true,
       username: tiktokUsername,
