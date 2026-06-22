@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY server.js ecosystem.config.js ./
+COPY server.js tiktok-event-normalize.js ecosystem.config.js ./
 COPY public ./public
 
 ENV NODE_ENV=production

@@ -18,6 +18,12 @@ const { OAuth2Client } = require('google-auth-library');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const {
+  normalizeTikTokUser,
+  normalizeChatEvent,
+  normalizeGiftEvent,
+  normalizeLikeEvent,
+} = require('./tiktok-event-normalize');
 
 // ================== Config ==================
 const isProd = process.env.NODE_ENV === 'production';
@@ -499,14 +505,8 @@ function emitStreamStatus(email, connected, extra = {}) {
   emitToStream(stream.tiktokUsername, 'status', payload);
 }
 
-function getAvatar(user) {
-  if (!user) return '';
-  const pic = user.profilePicture || user.profilePictureMedium || user.profilePictureLarge;
-  if (pic) {
-    if (Array.isArray(pic.urlList) && pic.urlList.length > 0) return pic.urlList[0];
-    if (Array.isArray(pic.url) && pic.url.length > 0) return pic.url[0];
-  }
-  return '';
+function getAvatar(userOrData) {
+  return normalizeTikTokUser(userOrData).avatar;
 }
 
 function computeTopLikers(stream, limit = 10) {
@@ -794,25 +794,13 @@ function attachTikTokListeners(conn, email, connectionId) {
     if (!isActive()) return;
     try {
       const stream = getOrCreateStream(email);
-      const diamonds = data.diamondCount
-        || (data.extendedGiftInfo && data.extendedGiftInfo.diamond_count)
-        || (data.giftDetails && data.giftDetails.diamondCount)
-        || 0;
-      if (diamonds <= 0) return;
+      const gift = normalizeGiftEvent(data);
+      if (gift.diamonds <= 0) return;
 
-      const giftType = data.giftType
-        ?? (data.extendedGiftInfo && data.extendedGiftInfo.gift_type)
-        ?? (data.giftDetails && data.giftDetails.giftType)
-        ?? 1;
-      const repeatEnd = data.repeatEnd === true || data.repeatEnd === 1;
-
-      const giftPictureUrl = data.giftPictureUrl
-        || (data.extendedGiftInfo && data.extendedGiftInfo.image && data.extendedGiftInfo.image.url_list && data.extendedGiftInfo.image.url_list[0])
-        || (data.giftDetails && data.giftDetails.icon && data.giftDetails.icon.urlList && data.giftDetails.icon.urlList[0])
-        || null;
-
-      const userLabel = data.user?.nickname || data.user?.uniqueId || 'คนดู';
-      const giftName = data.giftName || (data.giftDetails && data.giftDetails.giftName) || 'Unknown';
+      const userLabel = gift.user.nickname || gift.user.uniqueId || 'คนดู';
+      const {
+        diamonds, giftType, repeatEnd, giftPictureUrl, giftName,
+      } = gift;
 
       // giftType 1 = streak (Rose ฯลฯ) แสดงทีละชิ้นระหว่าง combo | จบ combo อัปเดตยอดอย่างเดียว ไม่สร้างของซ้ำ
       if (giftType === 1 && !repeatEnd) {
@@ -828,16 +816,16 @@ function attachTikTokListeners(conn, email, connectionId) {
       }
 
       if (giftType === 1 && repeatEnd) {
-        const repeatCount = data.repeatCount || 1;
+        const repeatCount = gift.repeatCount;
         const giftValue = diamonds * repeatCount;
         stream.totalDiamonds += giftValue;
 
-        const uid = data.user?.uniqueId || data.uniqueId;
+        const uid = gift.user.uniqueId;
         if (uid) {
           const existing = stream.gifters.get(uid) || {
-            nickname: data.user?.nickname || uid,
+            nickname: gift.user.nickname || uid,
             diamonds: 0,
-            avatar: getAvatar(data.user),
+            avatar: gift.user.avatar,
           };
           existing.diamonds += giftValue;
           stream.gifters.set(uid, existing);
@@ -855,16 +843,16 @@ function attachTikTokListeners(conn, email, connectionId) {
         return;
       }
 
-      const repeatCount = data.repeatCount || 1;
+      const repeatCount = gift.repeatCount;
       const giftValue = diamonds * repeatCount;
       stream.totalDiamonds += giftValue;
 
-      const uid = data.user?.uniqueId || data.uniqueId;
+      const uid = gift.user.uniqueId;
       if (uid) {
         const existing = stream.gifters.get(uid) || {
-          nickname: data.user?.nickname || uid,
+          nickname: gift.user.nickname || uid,
           diamonds: 0,
-          avatar: getAvatar(data.user),
+          avatar: gift.user.avatar,
         };
         existing.diamonds += giftValue;
         stream.gifters.set(uid, existing);
@@ -887,10 +875,19 @@ function attachTikTokListeners(conn, email, connectionId) {
   conn.on(WebcastEvent.CHAT, (data) => {
     if (!isActive()) return;
     const stream = getOrCreateStream(email);
+    const chat = normalizeChatEvent(data);
+    if (!chat.comment) return;
+    emitToStream(stream.tiktokUsername, 'chat', chat);
+  });
+
+  conn.on(WebcastEvent.EMOTE, (data) => {
+    if (!isActive()) return;
+    const stream = getOrCreateStream(email);
+    const user = normalizeTikTokUser(data);
     emitToStream(stream.tiktokUsername, 'chat', {
-      nickname: data.user?.nickname || data.uniqueId || 'user',
-      comment: data.comment || '',
-      avatar: getAvatar(data.user),
+      nickname: user.nickname,
+      comment: '[สติกเกอร์]',
+      avatar: user.avatar,
     });
   });
 
@@ -898,19 +895,20 @@ function attachTikTokListeners(conn, email, connectionId) {
     if (!isActive()) return;
     try {
       const stream = getOrCreateStream(email);
-      const uid = data.user?.uniqueId || data.uniqueId;
+      const like = normalizeLikeEvent(data);
+      const uid = like.user.uniqueId;
       if (uid) {
         const existing = stream.likers.get(uid) || {
-          nickname: data.user?.nickname || uid,
+          nickname: like.user.nickname || uid,
           likes: 0,
-          avatar: getAvatar(data.user),
+          avatar: like.user.avatar,
         };
-        existing.likes += (data.likeCount || 1);
+        existing.likes += like.likeCount;
         stream.likers.set(uid, existing);
         emitToStream(stream.tiktokUsername, 'topLikers', computeTopLikers(stream));
       }
 
-      emitToStream(stream.tiktokUsername, 'like', { avatar: getAvatar(data.user) });
+      emitToStream(stream.tiktokUsername, 'like', { avatar: like.user.avatar });
     } catch (err) {
       console.error('LIKE handler error:', err);
     }
