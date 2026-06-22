@@ -373,6 +373,9 @@
     
     <div id="googleSignInContainer" class="google-signin-wrap"></div>
     <p style="font-size:12px;color:#555">ข้อมูลของคุณจะถูกเก็บเฉพาะในเครื่องนี้</p>
+    <p id="googleOriginHint" class="help" style="display:none;margin-top:8px;color:#c96;">
+      ทดสอบบน localhost: ต้องเพิ่ม <code>http://localhost:3000</code> ใน Google Cloud Console → Credentials → Authorized JavaScript origins
+    </p>
   </div>
 
   <div class="container" id="dashboardPage" style="display: none;">
@@ -419,7 +422,8 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io({ withCredentials: true });
+    let socket = null;
+    let socketReadyPromise = null;
     let currentUser = null;
     let isConnected = false;
     let connectedUsername = '';
@@ -707,8 +711,8 @@
       return false;
     }
 
-    // ================== Socket Events ==================
-    socket.on('status', (data) => {
+    // ================== Dashboard Socket ==================
+    function handleSocketStatus(data) {
       const keepUsername = data.reason === 'reconnecting'
         || data.reason === 'disconnected'
         || data.reason === 'error'
@@ -751,7 +755,77 @@
       } else if (data.reason === 'disconnected' || data.reason === 'error') {
         showMessage('⚠️ TikTok หลุดชั่วคราว — กำลังพยายามเชื่อมใหม่...', false);
       }
-    });
+    }
+
+    function bindDashboardSocketEvents(sock) {
+      sock.off('status');
+      sock.on('status', handleSocketStatus);
+      sock.on('disconnect', (reason) => {
+        if (reason === 'io server disconnect' && currentUser) {
+          sock.connect();
+        }
+      });
+    }
+
+    function connectDashboardSocket() {
+      if (!socket) {
+        socket = io({
+          withCredentials: true,
+          reconnection: true,
+          reconnectionAttempts: Infinity,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+        });
+        bindDashboardSocketEvents(socket);
+      } else if (!socket.connected) {
+        socket.connect();
+      }
+      return socket;
+    }
+
+    function waitForDashboardSocket(maxMs = 5000) {
+      connectDashboardSocket();
+      if (socket.connected) return Promise.resolve(socket);
+
+      if (!socketReadyPromise) {
+        socketReadyPromise = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            cleanup();
+            socketReadyPromise = null;
+            reject(new Error('dashboard_socket_timeout'));
+          }, maxMs);
+
+          const onConnect = () => {
+            cleanup();
+            socketReadyPromise = null;
+            resolve(socket);
+          };
+
+          const onError = () => {
+            // keep waiting until timeout; socket.io will retry
+          };
+
+          const cleanup = () => {
+            clearTimeout(timeout);
+            socket.off('connect', onConnect);
+            socket.off('connect_error', onError);
+          };
+
+          socket.once('connect', onConnect);
+          socket.on('connect_error', onError);
+        });
+      }
+      return socketReadyPromise;
+    }
+
+    async function prepareDashboardConnection() {
+      connectDashboardSocket();
+      try {
+        await waitForDashboardSocket(5000);
+      } catch {
+        // save-tiktok registers HTTP dashboard presence on the server
+      }
+    }
 
     // ================== Google Sign-In (ID token) ==================
     let GOOGLE_CLIENT_ID = null;
@@ -782,6 +856,13 @@
       }
 
       return true;
+    }
+
+    function showLocalGoogleOriginHint() {
+      const host = window.location.hostname;
+      if (host !== 'localhost' && host !== '127.0.0.1') return;
+      const hint = document.getElementById('googleOriginHint');
+      if (hint) hint.style.display = 'block';
     }
 
     async function loadAppConfig() {
@@ -820,6 +901,13 @@
       }
     }
 
+    window.addEventListener('error', (event) => {
+      const msg = String(event.message || '');
+      if (msg.includes('origin is not allowed') || msg.includes('GSI_LOGGER')) {
+        showLocalGoogleOriginHint();
+      }
+    });
+
     function showDashboard(user) {
       document.getElementById('loginPage').style.display = 'none';
       document.getElementById('dashboardPage').style.display = 'block';
@@ -852,6 +940,8 @@
       loadSavedJarPreference();
       loadSavedBgPreferences();
 
+      connectDashboardSocket();
+
       fetch('/api/status', { credentials: 'include' })
         .then(r => r.json())
         .then(status => {
@@ -875,9 +965,13 @@
       if (!tiktokUsername) {
         return showMessage('กรุณากรอก TikTok Username', true);
       }
+      if (!currentUser?.email) {
+        return showMessage('กรุณา Login ด้วย Google ก่อน', true);
+      }
 
       showMessage('กำลังเชื่อมต่อ...', false);
       updateConnectionStatus(false, tiktokUsername, true);
+      await prepareDashboardConnection();
 
       try {
         const res = await fetch('/save-tiktok', {
@@ -915,10 +1009,13 @@
       }
     }
 
-    function saveOnly() {
+    async function saveOnly() {
       const tiktokUsername = document.getElementById('tiktokUsername').value.trim();
 
       if (!tiktokUsername) return showMessage('กรุณากรอก TikTok Username', true);
+      if (!currentUser?.email) return showMessage('กรุณา Login ด้วย Google ก่อน', true);
+
+      await prepareDashboardConnection();
 
       fetch('/save-tiktok', {
         method: 'POST',
@@ -1983,6 +2080,7 @@
       bindEvents();
       await loadAppConfig();
       await restoreSession();
+      showLocalGoogleOriginHint();
       if (!initGoogleSignIn()) {
         const waitForGoogle = setInterval(() => {
           if (initGoogleSignIn()) clearInterval(waitForGoogle);

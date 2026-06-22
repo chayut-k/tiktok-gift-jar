@@ -62,10 +62,25 @@ function ensureDataDirs() {
 
 ensureDataDirs();
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || APP_URL)
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+function buildAllowedOrigins() {
+  const origins = (process.env.ALLOWED_ORIGINS || APP_URL)
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  if (!isProd) {
+    origins.push(
+      `http://localhost:${PORT}`,
+      `http://127.0.0.1:${PORT}`,
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    );
+  }
+
+  return [...new Set(origins)];
+}
+
+const allowedOrigins = buildAllowedOrigins();
 
 function requireEnv() {
   const missing = [];
@@ -103,9 +118,16 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com', 'https://apis.google.com'],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com'],
       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
-      connectSrc: ["'self'", 'https://accounts.google.com', 'wss:', 'ws:'],
+      connectSrc: [
+        "'self'",
+        'https://accounts.google.com',
+        'https://oauth2.googleapis.com',
+        'https://www.googleapis.com',
+        'wss:',
+        'ws:',
+      ],
       frameSrc: ["'self'", 'https://accounts.google.com'],
       fontSrc: ["'self'", 'https:', 'data:'],
       objectSrc: ["'none'"],
@@ -211,6 +233,7 @@ function createStreamState(email) {
     gifters: new Map(),
     dashboardSockets: new Set(),
     dashboardDisconnectTimer: null,
+    dashboardHttpUntil: 0,
     reconnectTimer: null,
     reconnectAttempt: 0,
     waitingForLive: false,
@@ -333,8 +356,23 @@ function endLiveSession(email, reason = 'stream_end', extra = {}) {
   }
 }
 
+function touchDashboardHttpPresence(email) {
+  if (!email) return;
+  const stream = getOrCreateStream(email);
+  clearDashboardGraceTimer(stream);
+  stream.dashboardHttpUntil = Date.now() + 120000;
+}
+
+function isDashboardPresent(stream) {
+  if (!stream) return false;
+  if (stream.dashboardSockets.size > 0) return true;
+  if (stream.dashboardDisconnectTimer) return true;
+  if (stream.dashboardHttpUntil && Date.now() < stream.dashboardHttpUntil) return true;
+  return false;
+}
+
 function shouldKeepStreamAlive(stream) {
-  return stream.dashboardSockets.size > 0 || !!stream.dashboardDisconnectTimer;
+  return isDashboardPresent(stream);
 }
 
 function clearDashboardGraceTimer(stream) {
@@ -812,6 +850,8 @@ function prepareStreamUsername(email, tiktokUsername) {
 async function connectOrWaitForLive(email, tiktokUsername, sessionId = null) {
   if (!tiktokUsername) throw new Error('TikTok Username หายไป');
 
+  touchDashboardHttpPresence(email);
+
   const stream = prepareStreamUsername(email, tiktokUsername);
   stopWaitForLive(stream);
   clearReconnectTimer(stream);
@@ -978,6 +1018,9 @@ function getSessionEmail(req) {
 
 function mapTikTokError(err) {
   const msg = err?.message || '';
+  if (msg.includes('Dashboard') || msg.includes('dashboard')) {
+    return msg;
+  }
   if (msg.includes('user_not_found')) {
     return 'ไม่พบผู้ใช้ TikTok นี้ หรือยังไม่ได้เปิดไลฟ์';
   }
@@ -1041,7 +1084,7 @@ function saveSessionUser(req, userData) {
 
 app.get('/api/me', async (req, res) => {
   if (!req.session?.user?.email) {
-    return res.status(401).json({ success: false, loggedIn: false });
+    return res.json({ success: false, loggedIn: false });
   }
 
   try {
@@ -1111,6 +1154,8 @@ app.post('/connect-tiktok', connectLimiter, async (req, res) => {
     if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
     if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
 
+    touchDashboardHttpPresence(email);
+
     if (!users[email]) users[email] = {};
     users[email].tiktokUsername = tiktokUsername;
     if (sessionId) users[email].sessionId = sessionId;
@@ -1137,6 +1182,8 @@ app.post('/save-tiktok', connectLimiter, async (req, res) => {
 
     if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
     if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
+
+    touchDashboardHttpPresence(email);
 
     if (!users[email]) users[email] = {};
     users[email].tiktokUsername = tiktokUsername;
@@ -1184,6 +1231,8 @@ app.get('/api/status', (req, res) => {
   const email = getSessionEmail(req);
   if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
 
+  touchDashboardHttpPresence(email);
+
   const stream = userStreams.get(email);
   if (!stream) {
     return res.json({
@@ -1199,7 +1248,7 @@ app.get('/api/status', (req, res) => {
     waitingForLive: !!stream.waitingForLive,
     username: stream.tiktokUsername || null,
     totalDiamonds: stream.totalDiamonds,
-    dashboardActive: stream.dashboardSockets.size > 0,
+    dashboardActive: isDashboardPresent(stream),
     dashboardRequired: true,
   });
 });
@@ -1224,7 +1273,7 @@ io.on('connection', (socket) => {
     registerDashboardSocket(socket, sessionEmail);
   } else {
     console.log(`⚠️ Socket ${socket.id} rejected (no session / no user param)`);
-    socket.disconnect(true);
+    socket.disconnect(false);
     return;
   }
 

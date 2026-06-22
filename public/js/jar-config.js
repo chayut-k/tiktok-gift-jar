@@ -52,7 +52,12 @@ const JAR_CONFIGS = {
       upperWallHeight: 241,
       neckInset: 0,
       wallHeight: 147,
-      wallCenterY: 463
+      wallCenterY: 463,
+      spill: {
+        overflowDetectY: 115,
+        topSpillY: 72,
+        mouthSpillMargin: 4
+      }
     },
     classic: {
       giftsBottom: 90,
