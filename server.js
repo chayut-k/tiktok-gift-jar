@@ -7,7 +7,7 @@ const {
   TikTokLiveConnection,
   WebcastEvent,
   UserOfflineError,
-  FetchIsLiveError,
+  SignatureMissingTokensError,
 } = require('tiktok-live-connector');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
@@ -182,13 +182,21 @@ app.use('/api/', generalLimiter);
 app.use('/google-login', authLimiter);
 
 // ================== Session ==================
-const sessionMiddleware = session({
-  store: new FileStore({
+let sessionStore;
+try {
+  sessionStore = new FileStore({
     path: SESSION_DIR,
     ttl: 30 * 24 * 60 * 60,
-    retries: 0,
+    retries: 1,
     logFn: () => {},
-  }),
+  });
+} catch (err) {
+  console.error('❌ Session FileStore init failed:', err.message);
+  if (isProd) process.exit(1);
+}
+
+const sessionMiddleware = session({
+  store: sessionStore,
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -217,6 +225,8 @@ io.use(wrapMiddleware(sessionMiddleware));
 const userStreams = new Map();
 const usernameOwners = new Map();
 const DASHBOARD_GRACE_MS = 35000;
+const DASHBOARD_HTTP_TTL_MS = 5 * 60 * 1000;
+const CONNECT_INTENT_TTL_MS = 5 * 60 * 1000;
 const TIKTOK_RECONNECT_DELAYS = [3000, 5000, 10000, 15000, 30000, 60000];
 const TIKTOK_MAX_RECONNECT_ATTEMPTS = 12;
 const WAIT_FOR_LIVE_POLL_MS = 35000;
@@ -234,6 +244,7 @@ function createStreamState(email) {
     dashboardSockets: new Set(),
     dashboardDisconnectTimer: null,
     dashboardHttpUntil: 0,
+    connectIntentUntil: 0,
     reconnectTimer: null,
     reconnectAttempt: 0,
     waitingForLive: false,
@@ -253,17 +264,15 @@ function getTikTokCredentials(email) {
 
 function getTikTokConnectionOptions(email) {
   const { sessionId, ttTargetIdc } = getTikTokCredentials(email);
+  const signApiKey = process.env.TIKTOK_SIGN_API_KEY || process.env.EULER_API_KEY;
   const options = {
-    enableExtendedGiftInfo: true,
     processInitialData: false,
-    connectWithUniqueId: true,
     fetchRoomInfoOnConnect: false,
+    enableExtendedGiftInfo: !!signApiKey,
   };
 
   if (sessionId) options.sessionId = sessionId;
   if (ttTargetIdc) options.ttTargetIdc = ttTargetIdc;
-
-  const signApiKey = process.env.TIKTOK_SIGN_API_KEY || process.env.EULER_API_KEY;
   if (signApiKey) options.signApiKey = signApiKey;
 
   return options;
@@ -330,11 +339,22 @@ function startWaitForLive(email) {
   pollWaitForLive(email);
 }
 
+function isErrorInstance(err, ErrorClass) {
+  return typeof ErrorClass === 'function' && err instanceof ErrorClass;
+}
+
 function isUserNotLiveError(err) {
   if (!err) return false;
-  if (err instanceof UserOfflineError || err instanceof FetchIsLiveError) return true;
+  if (isErrorInstance(err, UserOfflineError)) return true;
   const msg = String(err.message || err).toLowerCase();
-  return /isn't online|not online|user.?offline|no live|isn't live/.test(msg);
+  return /isn't online|not online|user.?offline|no live|isn't live|fetchislive/.test(msg);
+}
+
+function isTikTokSignConfigError(err) {
+  if (!err) return false;
+  if (isErrorInstance(err, SignatureMissingTokensError)) return true;
+  const msg = String(err.message || err).toLowerCase();
+  return /business plan|signaturemissing|sign a request|eulerstream/.test(msg);
 }
 
 function canReconnect(stream) {
@@ -377,7 +397,13 @@ function touchDashboardHttpPresence(email) {
   if (!email) return;
   const stream = getOrCreateStream(email);
   clearDashboardGraceTimer(stream);
-  stream.dashboardHttpUntil = Date.now() + 120000;
+  stream.dashboardHttpUntil = Date.now() + DASHBOARD_HTTP_TTL_MS;
+}
+
+function touchConnectIntent(email) {
+  if (!email) return;
+  const stream = getOrCreateStream(email);
+  stream.connectIntentUntil = Date.now() + CONNECT_INTENT_TTL_MS;
 }
 
 function isDashboardPresent(stream) {
@@ -385,6 +411,7 @@ function isDashboardPresent(stream) {
   if (stream.dashboardSockets.size > 0) return true;
   if (stream.dashboardDisconnectTimer) return true;
   if (stream.dashboardHttpUntil && Date.now() < stream.dashboardHttpUntil) return true;
+  if (stream.connectIntentUntil && Date.now() < stream.connectIntentUntil) return true;
   return false;
 }
 
@@ -906,6 +933,10 @@ function attachTikTokListeners(conn, email, connectionId) {
       endLiveSession(email, 'stream_end', { offline: true });
       return;
     }
+    if (isTikTokSignConfigError(err)) {
+      emitStreamStatus(email, false, { reason: 'error', error: mapTikTokError(err) });
+      return;
+    }
     emitStreamStatus(email, false, { reason: 'error', error: 'Connection error' });
     scheduleTikTokReconnect(email);
   });
@@ -936,6 +967,7 @@ async function connectOrWaitForLive(email, tiktokUsername) {
   if (!tiktokUsername) throw new Error('TikTok Username หายไป');
 
   touchDashboardHttpPresence(email);
+  touchConnectIntent(email);
 
   if (!users[email]) users[email] = {};
   users[email].connectionPaused = false;
@@ -1108,6 +1140,9 @@ function mapTikTokError(err) {
   const msg = err?.message || '';
   if (msg.includes('Dashboard') || msg.includes('dashboard')) {
     return msg;
+  }
+  if (isTikTokSignConfigError(err)) {
+    return 'TikTok sign server ต้องการ API key — ใส่ TIKTOK_SIGN_API_KEY ใน Railway หรือ sessionid + tt-target-idc ใน Dashboard';
   }
   if (msg.includes('user_not_found')) {
     return 'ไม่พบผู้ใช้ TikTok นี้ หรือยังไม่ได้เปิดไลฟ์';
@@ -1399,7 +1434,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`   Health: ${APP_URL}/health`);
   console.log(`   Data dir: ${DATA_DIR}`);
   console.log(`   Users file: ${USERS_FILE}`);
-  console.log(`   Sessions: ${SESSION_DIR}`);
+  console.log(`   Sessions: ${SESSION_DIR} (${sessionStore ? 'FileStore' : 'MemoryStore'})`);
   console.log('   Mode: multi-user (per-stream rooms)');
 });
 
