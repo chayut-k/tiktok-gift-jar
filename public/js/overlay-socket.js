@@ -1,6 +1,12 @@
 function createOverlaySocket() {
   const user = new URLSearchParams(window.location.search).get('user') || '';
-  return io({ query: { user } });
+  return io({
+    query: { user },
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+  });
 }
 
 function getOverlayBgId() {

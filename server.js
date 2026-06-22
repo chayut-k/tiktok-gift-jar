@@ -238,6 +238,8 @@ function createStreamState(email) {
     reconnectAttempt: 0,
     waitingForLive: false,
     waitForLiveTimer: null,
+    autoConnectInFlight: false,
+    autoConnectScheduleTimer: null,
   };
 }
 
@@ -387,9 +389,16 @@ function clearReconnectTimer(stream) {
   stream.reconnectTimer = null;
 }
 
+function clearAutoConnectScheduleTimer(stream) {
+  if (!stream?.autoConnectScheduleTimer) return;
+  clearTimeout(stream.autoConnectScheduleTimer);
+  stream.autoConnectScheduleTimer = null;
+}
+
 function clearStreamTimers(stream) {
   clearDashboardGraceTimer(stream);
   clearReconnectTimer(stream);
+  clearAutoConnectScheduleTimer(stream);
   stopWaitForLive(stream);
 }
 
@@ -497,12 +506,73 @@ function disconnectUserStream(email, reason = 'manual') {
 
   clearStreamTimers(stream);
   stream.reconnectAttempt = 0;
+  stream.autoConnectInFlight = false;
   stopTikTokConnection(stream);
 
   clearUsernameOwner(stream.tiktokUsername, email);
   stream.tiktokUsername = '';
+
+  if (reason === 'manual') {
+    if (!users[email]) users[email] = {};
+    users[email].connectionPaused = true;
+    saveUsers();
+  }
+
   emitStreamStatus(email, false, reason ? { reason } : {});
   console.log(`🔌 ตัดการเชื่อมต่อของ ${email} (${reason})`);
+}
+
+async function tryAutoConnectOnDashboardOpen(email) {
+  const savedUsername = sanitizeTikTokUsername(users[email]?.tiktokUsername);
+  if (!savedUsername) return;
+  if (users[email]?.connectionPaused) return;
+
+  const stream = getOrCreateStream(email);
+  if (!shouldKeepStreamAlive(stream)) return;
+  if (stream.connection || stream.connecting || stream.reconnectTimer || stream.waitingForLive) return;
+  if (stream.autoConnectInFlight) return;
+
+  stream.autoConnectInFlight = true;
+  const sessionId = users[email]?.sessionId || null;
+
+  console.log(`🔁 [${email}] Dashboard reopened — auto-connect @${savedUsername}`);
+  emitStreamStatus(email, false, {
+    reason: 'auto_connecting',
+    username: savedUsername,
+    attempt: 1,
+  });
+
+  try {
+    await connectOrWaitForLive(email, savedUsername, sessionId);
+  } catch (err) {
+    console.error(`Auto-connect failed [${email}]:`, err.message || err);
+    emitStreamStatus(email, false, {
+      reason: 'error',
+      username: savedUsername,
+    });
+  } finally {
+    stream.autoConnectInFlight = false;
+  }
+}
+
+function scheduleAutoConnectOnDashboardOpen(email) {
+  if (!email) return;
+  const savedUsername = sanitizeTikTokUsername(users[email]?.tiktokUsername);
+  if (!savedUsername || users[email]?.connectionPaused) return;
+
+  const stream = getOrCreateStream(email);
+  if (stream.connection || stream.connecting || stream.reconnectTimer
+    || stream.waitingForLive || stream.autoConnectInFlight) {
+    return;
+  }
+
+  clearAutoConnectScheduleTimer(stream);
+  stream.autoConnectScheduleTimer = setTimeout(() => {
+    stream.autoConnectScheduleTimer = null;
+    tryAutoConnectOnDashboardOpen(email).catch((err) => {
+      console.error(`Scheduled auto-connect failed [${email}]:`, err.message || err);
+    });
+  }, 400);
 }
 
 function scheduleDashboardGraceDisconnect(email) {
@@ -629,6 +699,8 @@ function registerDashboardSocket(socket, email) {
 
   if (stream.waitingForLive && !stream.waitForLiveTimer && !stream.connection) {
     pollWaitForLive(email);
+  } else if (!stream.connection && !stream.connecting && !stream.reconnectTimer) {
+    scheduleAutoConnectOnDashboardOpen(email);
   }
 
   console.log(`🖥️ Dashboard online: ${email} (${stream.dashboardSockets.size} tab)`);
@@ -851,6 +923,10 @@ async function connectOrWaitForLive(email, tiktokUsername, sessionId = null) {
   if (!tiktokUsername) throw new Error('TikTok Username หายไป');
 
   touchDashboardHttpPresence(email);
+
+  if (!users[email]) users[email] = {};
+  users[email].connectionPaused = false;
+  saveUsers();
 
   const stream = prepareStreamUsername(email, tiktokUsername);
   stopWaitForLive(stream);
@@ -1232,24 +1308,36 @@ app.get('/api/status', (req, res) => {
   if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
 
   touchDashboardHttpPresence(email);
+  scheduleAutoConnectOnDashboardOpen(email);
 
   const stream = userStreams.get(email);
+  const savedUsername = users[email]?.tiktokUsername || null;
+  const connectionPaused = !!users[email]?.connectionPaused;
+
   if (!stream) {
     return res.json({
       connected: false,
-      username: users[email]?.tiktokUsername || null,
+      username: savedUsername,
       totalDiamonds: 0,
       dashboardRequired: true,
+      connectionPaused,
+      reconnecting: false,
     });
   }
 
   res.json({
     connected: !!stream.connection,
     waitingForLive: !!stream.waitingForLive,
-    username: stream.tiktokUsername || null,
+    username: stream.tiktokUsername || savedUsername,
     totalDiamonds: stream.totalDiamonds,
     dashboardActive: isDashboardPresent(stream),
     dashboardRequired: true,
+    connectionPaused,
+    reconnecting: !!(
+      stream.reconnectTimer
+      || stream.connecting
+      || stream.autoConnectInFlight
+    ),
   });
 });
 

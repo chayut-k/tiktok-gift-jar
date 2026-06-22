@@ -714,6 +714,7 @@
     // ================== Dashboard Socket ==================
     function handleSocketStatus(data) {
       const keepUsername = data.reason === 'reconnecting'
+        || data.reason === 'auto_connecting'
         || data.reason === 'disconnected'
         || data.reason === 'error'
         || data.reason === 'waiting_for_live'
@@ -728,7 +729,7 @@
         connectedUsername = data.username;
       }
 
-      const isReconnecting = data.reason === 'reconnecting';
+      const isReconnecting = data.reason === 'reconnecting' || data.reason === 'auto_connecting';
       const isWaiting = data.reason === 'waiting_for_live';
       updateConnectionStatus(
         data.connected,
@@ -746,6 +747,8 @@
         showMessage('📴 Live จบแล้ว — รอไลฟ์รอบถัดไปอัตโนมัติ', false);
       } else if (data.reason === 'reconnect_exhausted') {
         showMessage('⏳ กำลังรอไลฟ์อีกครั้ง...', false);
+      } else if (data.reason === 'auto_connecting') {
+        showMessage('🔄 เปิด Dashboard — กำลังเชื่อมต่อ TikTok อัตโนมัติ...', false);
       } else if (data.reason === 'reconnecting') {
         showMessage(`🔄 กำลังเชื่อมต่อ TikTok ใหม่... (ครั้งที่ ${data.attempt || 1})`, false);
       } else if (data.reason === 'reconnected') {
@@ -941,21 +944,48 @@
       loadSavedBgPreferences();
 
       connectDashboardSocket();
+      prepareDashboardConnection().catch(() => {});
+      restoreConnectionState(user);
+    }
 
-      fetch('/api/status', { credentials: 'include' })
-        .then(r => r.json())
-        .then(status => {
-          if (status.username) connectedUsername = status.username;
-          if (status.connected && status.username) {
-            isConnected = true;
-            updateConnectionStatus(true, status.username);
-          } else if (status.waitingForLive && status.username) {
-            isConnected = false;
-            updateConnectionStatus(false, status.username, false, true);
-          }
-          updateOverlayUI();
-        })
-        .catch(() => updateOverlayUI());
+    async function restoreConnectionState(user) {
+      try {
+        const res = await fetch('/api/status', { credentials: 'include' });
+        const status = await res.json();
+        const username = status.username || user.tiktokUsername || '';
+
+        if (username) {
+          connectedUsername = username;
+          document.getElementById('tiktokUsername').value = username;
+        }
+
+        if (status.connected && username) {
+          isConnected = true;
+          updateConnectionStatus(true, username);
+        } else if (status.waitingForLive && username) {
+          isConnected = false;
+          updateConnectionStatus(false, username, false, true);
+          showMessage('⏳ รอขึ้นไลฟ์ — ระบบจะเชื่อมต่ออัตโนมัติเมื่อคุณเริ่มไลฟ์', false);
+        } else if (status.reconnecting && username) {
+          isConnected = false;
+          updateConnectionStatus(false, username, true);
+          showMessage('🔄 เปิด Dashboard — กำลังเชื่อมต่อ TikTok อัตโนมัติ...', false);
+        } else if (status.connectionPaused) {
+          isConnected = false;
+          updateConnectionStatus(false, username);
+        } else if (username) {
+          isConnected = false;
+          updateConnectionStatus(false, username, true);
+          showMessage('🔄 เปิด Dashboard — กำลังเชื่อมต่อ TikTok อัตโนมัติ...', false);
+        } else {
+          isConnected = false;
+          updateConnectionStatus(false);
+        }
+
+        updateOverlayUI();
+      } catch {
+        updateOverlayUI();
+      }
     }
 
     // ================== TikTok Connection ==================
