@@ -214,6 +214,11 @@ app.use(express.json({ limit: '16kb' }));
 app.use(express.static('public', {
   maxAge: isProd ? '1d' : 0,
   etag: true,
+  setHeaders(res, filePath) {
+    if (/\.(html|js)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    }
+  },
 }));
 
 const wrapMiddleware = (middleware) => (socket, next) => {
@@ -1167,6 +1172,7 @@ app.get('/health', (req, res) => {
     activeConnections,
     sessionStore: sessionStore ? 'file' : 'memory',
     nodeEnv: process.env.NODE_ENV || 'development',
+    version: require('./package.json').version,
   });
 });
 

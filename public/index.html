@@ -1148,9 +1148,12 @@
       }
     }
 
+    const OVERLAY_ASSET_VERSION = '1.0.1';
+
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);
       url.searchParams.set('user', username);
+      url.searchParams.set('v', OVERLAY_ASSET_VERSION);
       Object.entries(extraParams).forEach(([key, value]) => {
         if (value != null && value !== '') url.searchParams.set(key, value);
       });
@@ -1187,6 +1190,7 @@
       const url = new URL('/gift-jar-physics.html', window.location.origin);
       url.searchParams.set('jar', jarId);
       url.searchParams.set('coins', coins);
+      url.searchParams.set('v', OVERLAY_ASSET_VERSION);
       const giftSizeParam = giftSizeUrlParam(giftSize);
       if (giftSizeParam) url.searchParams.set('giftsize', giftSizeParam);
       url.searchParams.set('preview', '1');
