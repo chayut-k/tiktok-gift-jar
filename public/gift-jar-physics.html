@@ -248,8 +248,34 @@
         ];
       }
 
+      function buildJar4BulbousWalls() {
+        const s = JAR.segments;
+        const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 18);
+
+        const neckH = s.bulgeTopY - s.neckTopY + 12;
+        const neckCY = (s.neckTopY + s.bulgeTopY) / 2;
+        const neckLeft = wall(s.neckLeft + 7, neckCY, 14, neckH);
+        const neckRight = wall(s.neckRight - 7, neckCY, 14, neckH);
+
+        const bulgeH = s.bulgeBottomY - s.bulgeTopY;
+        const bulgeCY = (s.bulgeTopY + s.bulgeBottomY) / 2;
+        const bulgeLeft = wall(s.bulgeLeft + 7, bulgeCY, 14, bulgeH);
+        const bulgeRight = wall(s.bulgeRight - 7, bulgeCY, 14, bulgeH);
+
+        const taperH = s.taperBottomY - s.bulgeBottomY + 24;
+        const taperCY = (s.bulgeBottomY + s.taperBottomY) / 2;
+        const taperLeft = wall((s.taperLeft + s.bulgeLeft) / 2, taperCY, 14, taperH, 0.38);
+        const taperRight = wall((s.taperRight + s.bulgeRight) / 2, taperCY, 14, taperH, -0.38);
+
+        const floorCorners = buildFloorCornerWalls(s.floorLeft, s.floorRight);
+
+        setJarWallFriction(neckLeft, neckRight, bulgeLeft, bulgeRight, taperLeft, taperRight);
+        return [floor, neckLeft, neckRight, bulgeLeft, bulgeRight, taperLeft, taperRight, ...floorCorners];
+      }
+
       function buildJarWalls() {
         if (JAR.wallStyle === 'bulbous') {
+          if (jarId === 'jar4' && JAR.segments) return buildJar4BulbousWalls();
           return buildBulbousJarWalls();
         }
 
@@ -298,7 +324,38 @@
         return giftPhysicsRadius(diamonds, GIFT_SIZE_MULTIPLIER);
       }
 
+      function getJar4InnerXAtY(y) {
+        const s = JAR.segments;
+        if (y <= s.bulgeTopY) {
+          return { left: s.neckLeft, right: s.neckRight };
+        }
+        if (y <= s.bulgeBottomY) {
+          const t = (y - s.bulgeTopY) / (s.bulgeBottomY - s.bulgeTopY);
+          return {
+            left: s.neckLeft + (s.bulgeLeft - s.neckLeft) * t,
+            right: s.neckRight + (s.bulgeRight - s.neckRight) * t,
+          };
+        }
+        if (y <= s.taperBottomY) {
+          const t = (y - s.bulgeBottomY) / (s.taperBottomY - s.bulgeBottomY);
+          return {
+            left: s.bulgeLeft + (s.taperLeft - s.bulgeLeft) * t,
+            right: s.bulgeRight + (s.taperRight - s.bulgeRight) * t,
+          };
+        }
+        const span = Math.max(1, JAR.floorY - s.taperBottomY);
+        const t = Math.min(1, (y - s.taperBottomY) / span);
+        return {
+          left: s.taperLeft + (s.floorLeft - s.taperLeft) * t,
+          right: s.taperRight + (s.floorRight - s.taperRight) * t,
+        };
+      }
+
       function getJarInnerXAtY(y) {
+        if (jarId === 'jar4' && JAR.segments) {
+          return getJar4InnerXAtY(y);
+        }
+
         if (JAR.wallStyle !== 'bulbous' || JAR.upperInnerLeft == null) {
           return { left: JAR.innerLeft, right: JAR.innerRight };
         }
@@ -321,18 +378,17 @@
       }
 
       function isSpilledOutsideJar(x, y = JAR.floorY) {
-        if (jarId === 'jar4') {
-          const margin = 8;
+        if (jarId === 'jar4' && JAR.segments) {
+          const margin = 6;
           const bounds = getJarInnerXAtY(y);
           if (x < bounds.left - margin || x > bounds.right + margin) return true;
 
-          const topSpillY = JAR_SPILL?.topSpillY ?? 72;
-          const mouthMargin = JAR_SPILL?.mouthSpillMargin ?? 4;
+          const topSpillY = JAR_SPILL?.topSpillY ?? JAR.segments.neckTopY + 8;
           if (y < topSpillY) {
-            const mouthL = JAR.centerX - JAR.mouthHalfWidth - mouthMargin;
-            const mouthR = JAR.centerX + JAR.mouthHalfWidth + mouthMargin;
-            if (x < mouthL || x > mouthR) return true;
-            if (y < JAR.mouthY - 6) return true;
+            const neckL = JAR.segments.neckLeft - (JAR_SPILL?.mouthSpillMargin ?? 2);
+            const neckR = JAR.segments.neckRight + (JAR_SPILL?.mouthSpillMargin ?? 2);
+            if (x < neckL || x > neckR) return true;
+            if (y < JAR.mouthY - 4) return true;
           }
           return false;
         }
@@ -555,41 +611,48 @@
       }
 
       function assistJar4SpillFlow() {
-        const topSpillY = JAR_SPILL?.topSpillY ?? 72;
+        const s = JAR.segments;
+        const topSpillY = JAR_SPILL?.topSpillY ?? s.neckTopY + 8;
 
         getGiftBodies().forEach((body) => {
           if (body.label !== 'gift' || body.isStatic) return;
           if (isOnSpillFloor(body)) return;
 
-          const r = body.circleRadius || 12;
           const x = body.position.x;
           const y = body.position.y;
           const bounds = getJarInnerXAtY(y);
-          const sideMargin = 10;
+          const sideMargin = 8;
           const outsideX = x < bounds.left - sideMargin || x > bounds.right + sideMargin;
           const spilled = outsideX || isSpilledGift(body);
 
           if (spilled) {
-            if (body.speed > 0.58 && body.velocity.y > 1.0) return;
+            if (body.speed > 0.65 && body.velocity.y > 1.2) return;
 
-            const hugIn = x < JAR.centerX ? 0.22 : -0.22;
+            const slideDir = x < JAR.centerX ? -1 : 1;
             Body.setVelocity(body, {
-              x: body.velocity.x * 0.82 + hugIn,
-              y: Math.max(body.velocity.y, 3.1 + Math.random() * 1.1)
+              x: body.velocity.x * 0.78 + slideDir * 0.35,
+              y: Math.max(body.velocity.y, 3.4 + Math.random() * 1.2)
             });
             body.lastNudgeTime = Date.now();
             return;
           }
 
           if (y < topSpillY) {
-            if (body.speed > 0.52 && Math.abs(body.velocity.x) > 0.85) return;
-
-            const distLeft = x - bounds.left;
-            const distRight = bounds.right - x;
+            const distLeft = x - s.neckLeft;
+            const distRight = s.neckRight - x;
             const exitDir = distLeft < distRight ? -1 : 1;
             Body.setVelocity(body, {
-              x: body.velocity.x + exitDir * (1.15 + Math.random() * 0.45),
-              y: Math.max(body.velocity.y, 2.5 + Math.random() * 0.9)
+              x: body.velocity.x + exitDir * (1.6 + Math.random() * 0.5),
+              y: Math.max(body.velocity.y, 2.8 + Math.random() * 1.0)
+            });
+            body.lastNudgeTime = Date.now();
+            return;
+          }
+
+          if (y < s.bulgeBottomY + 20 && (x < s.bulgeLeft - 4 || x > s.bulgeRight + 4)) {
+            Body.setVelocity(body, {
+              x: body.velocity.x,
+              y: Math.max(body.velocity.y, 2.6 + Math.random() * 0.8)
             });
             body.lastNudgeTime = Date.now();
           }
