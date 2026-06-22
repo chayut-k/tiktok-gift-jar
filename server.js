@@ -1165,6 +1165,8 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     activeUsers: userStreams.size,
     activeConnections,
+    sessionStore: sessionStore ? 'file' : 'memory',
+    nodeEnv: process.env.NODE_ENV || 'development',
   });
 });
 
