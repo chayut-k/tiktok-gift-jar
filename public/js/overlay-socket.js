@@ -1,11 +1,17 @@
 function createOverlaySocket() {
   const user = new URLSearchParams(window.location.search).get('user') || '';
   return io({
+    path: '/socket.io/',
     query: { user },
+    transports: ['polling', 'websocket'],
+    upgrade: true,
+    rememberUpgrade: false,
+    withCredentials: false,
+    timeout: 20000,
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
-    reconnectionDelayMax: 5000,
+    reconnectionDelayMax: 8000,
   });
 }
 

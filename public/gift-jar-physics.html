@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
   <title>Gift Jar Physics</title>
-  <script src="/js/jar-config.js?v=1.0.1"></script>
-  <script src="/js/gift-size.js?v=1.0.1"></script>
+  <script src="/js/jar-config.js?v=1.0.2"></script>
+  <script src="/js/gift-size.js?v=1.0.2"></script>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -110,7 +110,7 @@
 
   <script src="/js/matter.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/overlay-socket.js"></script>
+  <script src="/js/overlay-socket.js?v=1.0.2"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
@@ -708,10 +708,10 @@
         gift.sleepThreshold = Infinity;
 
         World.add(engine.world, gift);
-        Body.setAngularVelocity(gift, (Math.random() - 0.5) * 0.16);
+        Body.setAngularVelocity(gift, (Math.random() - 0.5) * (jar4Gift ? 0.08 : 0.16));
         Body.setVelocity(gift, {
-          x: (Math.random() - 0.5) * 0.55,
-          y: 1.8 + Math.random() * 1.2
+          x: (Math.random() - 0.5) * (jar4Gift ? 0.18 : 0.55),
+          y: jar4Gift ? 1.2 + Math.random() * 0.5 : 1.8 + Math.random() * 1.2
         });
 
         giftCount++;
@@ -821,9 +821,60 @@
         });
       }
 
+      function isJar4Overflowing() {
+        const gifts = getGiftBodies();
+        if (!gifts.length) return false;
+
+        let highestTop = Infinity;
+        gifts.forEach((body) => {
+          const top = body.position.y - (body.circleRadius || 12);
+          if (top < highestTop) highestTop = top;
+        });
+        return highestTop <= OVERFLOW_DETECT_Y;
+      }
+
+      function recoverJar4SideLeaks() {
+        const s = JAR.segments;
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isOnSpillFloor(body) || isSpilledGift(body)) return;
+
+          const age = Date.now() - (body.spawnTime || 0);
+          if (age > 12000) return;
+
+          const y = body.position.y;
+          if (y < s.neckTopY || y > s.bulgeBottomY + 30) return;
+
+          const radius = body.circleRadius || 12;
+          const bounds = getJarInnerXAtY(y);
+          const minX = bounds.left + radius - 1;
+          const maxX = bounds.right - radius + 1;
+
+          if (body.position.x < minX - 4) {
+            Body.setPosition(body, { x: minX, y: body.position.y });
+            Body.setVelocity(body, {
+              x: Math.max(0.08, body.velocity.x * 0.12),
+              y: body.velocity.y * 0.82,
+            });
+            body.lastNudgeTime = Date.now();
+          } else if (body.position.x > maxX + 4) {
+            Body.setPosition(body, { x: maxX, y: body.position.y });
+            Body.setVelocity(body, {
+              x: Math.min(-0.08, body.velocity.x * 0.12),
+              y: body.velocity.y * 0.82,
+            });
+            body.lastNudgeTime = Date.now();
+          }
+        });
+      }
+
       function assistJar4SpillFlow() {
         const s = JAR.segments;
         const topSpillY = JAR_SPILL?.topSpillY ?? s.neckTopY + 8;
+        const overflowing = isJar4Overflowing();
+        const neckL = s.neckLeft - (JAR_SPILL?.mouthSpillMargin ?? 2);
+        const neckR = s.neckRight + (JAR_SPILL?.mouthSpillMargin ?? 2);
 
         getGiftBodies().forEach((body) => {
           if (body.label !== 'gift' || body.isStatic) return;
@@ -831,13 +882,13 @@
 
           const x = body.position.x;
           const y = body.position.y;
+          const radius = body.circleRadius || 12;
           const bounds = getJarInnerXAtY(y);
-          const sideMargin = 8;
-          const outsideX = x < bounds.left - sideMargin || x > bounds.right + sideMargin;
+          const outsideX = x < bounds.left - 8 || x > bounds.right + 8;
+          const outsideMouth = x < neckL - radius || x > neckR + radius;
           const spilled = outsideX || isSpilledGift(body);
 
           if (spilled) {
-            const radius = body.circleRadius || 12;
             const feetY = y + radius;
             if (feetY >= SPILL_FLOOR_Y - 8) return;
             if (body.speed > 0.65 && body.velocity.y > 1.2 && y < JAR.floorY) return;
@@ -851,13 +902,12 @@
             return;
           }
 
-          if (y < topSpillY) {
-            const distLeft = x - s.neckLeft;
-            const distRight = s.neckRight - x;
-            const exitDir = distLeft < distRight ? -1 : 1;
+          // ผลักออกปากโถเฉพาะตอนโถเต็มและของอยู่นอกคอโถแล้ว
+          if (y < topSpillY && overflowing && outsideMouth) {
+            const exitDir = x < JAR.centerX ? -1 : 1;
             Body.setVelocity(body, {
-              x: body.velocity.x + exitDir * (1.6 + Math.random() * 0.5),
-              y: Math.max(body.velocity.y, 2.8 + Math.random() * 1.0)
+              x: body.velocity.x + exitDir * (1.1 + Math.random() * 0.35),
+              y: Math.max(body.velocity.y, 2.2 + Math.random() * 0.7)
             });
             body.lastNudgeTime = Date.now();
             return;
@@ -865,7 +915,7 @@
 
           const midLeft = s.bulgeMidLeft ?? s.bulgeLeft;
           const midRight = s.bulgeMidRight ?? s.bulgeRight;
-          if (y < s.bulgeBottomY + 20 && (x < midLeft - 4 || x > midRight + 4)) {
+          if (y < s.bulgeBottomY + 20 && (x < midLeft - radius - 2 || x > midRight + radius + 2)) {
             Body.setVelocity(body, {
               x: body.velocity.x,
               y: Math.max(body.velocity.y, 2.6 + Math.random() * 0.8)
@@ -979,6 +1029,7 @@
         removeEscapedGifts();
         relieveNeckJam();
         if (jarId === 'jar4') {
+          recoverJar4SideLeaks();
           recoverJar4BottomLeaks();
           stabilizeJar4BottomStack();
           assistJar4SpillFlow();
@@ -989,6 +1040,12 @@
 
       if (!isPreview) {
         const socket = createOverlaySocket();
+        socket.on('connect_error', (err) => {
+          console.warn('Overlay socket connect error:', err.message || err);
+        });
+        socket.on('reconnect', () => {
+          console.log('Overlay socket reconnected');
+        });
         socket.on('gift', (data) => {
           if (!data.user) return;
 

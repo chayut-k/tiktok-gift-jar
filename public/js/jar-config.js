@@ -79,10 +79,10 @@ const JAR_CONFIGS = {
       },
       spawn: {
         y: 158,
-        halfWidth: 42,
-        spread: 1.0,
-        lift: 20,
-        jitter: 8,
+        halfWidth: 30,
+        spread: 0.85,
+        lift: 18,
+        jitter: 5,
       },
       spill: {
         overflowDetectY: 215,

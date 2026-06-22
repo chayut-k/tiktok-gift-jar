@@ -100,16 +100,27 @@ const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const app = express();
 const httpServer = createServer(app);
 
-app.set('trust proxy', isProd ? 1 : false);
+app.set('trust proxy', isProd ? true : false);
 
 const io = new Server(httpServer, {
+  path: '/socket.io/',
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(null, true);
+    },
     methods: ['GET', 'POST'],
     credentials: true,
   },
-  pingInterval: 15000,
-  pingTimeout: 10000,
+  pingInterval: 25000,
+  pingTimeout: 120000,
+  connectTimeout: 45000,
+  transports: ['polling', 'websocket'],
+  allowUpgrades: true,
+  perMessageDeflate: false,
 });
 
 // ================== Security Middleware ==================
