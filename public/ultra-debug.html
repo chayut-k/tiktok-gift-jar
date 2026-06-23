@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Ultra Jar — Debug ขอบชน</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #111;
+      color: #eee;
+      font-family: Arial, sans-serif;
+    }
+    h1 { font-size: 20px; margin: 0 0 8px; }
+    p { color: #aaa; margin: 0 0 16px; line-height: 1.5; }
+    .wrap { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+    figure { margin: 0; }
+    figcaption { margin-top: 8px; font-size: 13px; color: #bbb; max-width: 460px; }
+    img {
+      display: block;
+      border: 1px solid #333;
+      background: #000;
+      max-width: 100%;
+    }
+    .legend {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 14px 16px;
+      min-width: 280px;
+    }
+    .legend h2 { font-size: 15px; margin: 0 0 10px; }
+    .legend li { margin: 6px 0; font-size: 13px; list-style: none; display: flex; gap: 8px; align-items: center; }
+    .sw { width: 18px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+    .note { margin-top: 16px; padding: 12px; background: #221818; border-left: 3px solid #f55; font-size: 13px; color: #fcc; max-width: 720px; }
+    a { color: #7cf; }
+  </style>
+</head>
+<body>
+  <h1>Ultra Jar — เส้นขอบชนปัจจุบัน</h1>
+  <p>
+    รูปนี้วาดทับบน <code>ultra.png</code> ขนาด stage จริง 460×620 (เท่า overlay)
+    เทียบกับเส้น <strong>marking เดิม</strong> (น้ำเงิน) กับ <strong>config ปัจจุบัน</strong> (สีอื่น)
+  </p>
+
+  <div class="wrap">
+    <figure>
+      <img src="/images/ultra-debug-current.png" width="460" height="620" alt="ขอบชน ultra ปัจจุบัน">
+      <figcaption>ขนาดจริง 460×620 — ใช้เทียบกับ overlay</figcaption>
+    </figure>
+
+    <figure>
+      <img src="/images/ultra-debug-current-2x.png" width="460" height="620" alt="ขอบชน ultra ขยาย 2x">
+      <figcaption>ขยาย 2× (มุมขวาบนแนบ live2.png จากปัญหาที่พบ)</figcaption>
+    </figure>
+
+    <div class="legend">
+      <h2>คำอธิบายสี</h2>
+      <ul>
+        <li><span class="sw" style="background:#50a0ff"></span> น้ำเงิน = marking เดิม (อ้างอิง)</li>
+        <li><span class="sw" style="background:#ff3030"></span> แดง = ขอบแก้ว config ปัจจุบัน</li>
+        <li><span class="sw" style="background:#ff8c00"></span> ส้ม = กำแพงชนจริง (+4px inset)</li>
+        <li><span class="sw" style="background:#30dc50"></span> เขียว = ช้อน (ramp + guard)</li>
+        <li><span class="sw" style="background:#00dcee"></span> ฟ้า = feedZone (ไม่นับเป็นล้น)</li>
+        <li><span class="sw" style="background:#ffe630"></span> เหลือง = จุดเกิด spawn</li>
+        <li><span class="sw" style="background:#ff00ff"></span> ม่วง = ปลายช้อน (tip)</li>
+      </ul>
+      <p style="margin:12px 0 0;font-size:12px;color:#888">
+        สร้างจาก <code>node scripts/ultra-debug-overlay.js</code><br>
+        ดู live: <a href="/gift-jar-physics.html?jar=ultra&preview=1&debug=1">?debug=1</a>
+      </p>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>สิ่งที่เปลี่ยนจาก marking เดิม (น้ำเงิน):</strong><br>
+    • ช้อน (เขียว) ปรับล่าสุด — ปลายช้อน (ม่วง) y≈360, ramp center y≈273<br>
+    • จุด spawn (เหลือง) ขยับซ้าย — centerX 374 → 328<br>
+    • ไม่มี chute / rim wall แล้ว — ปากโถเปิดด้านบน<br>
+    • กำแพงส้มเริ่มที่ bodyTopY=362 (ไม่มีขอบด้านบนปิด)
+  </div>
+</body>
+</html>

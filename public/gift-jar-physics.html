@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
   <title>Gift Jar Physics</title>
-  <script src="/js/jar-config.js?v=1.0.4"></script>
-  <script src="/js/gift-size.js?v=1.0.4"></script>
+  <script src="/js/jar-config.js?v=1.0.5"></script>
+  <script src="/js/gift-size.js?v=1.0.5"></script>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -110,7 +110,7 @@
 
   <script src="/js/matter.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/overlay-socket.js?v=1.0.4"></script>
+  <script src="/js/overlay-socket.js?v=1.0.5"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
@@ -374,7 +374,7 @@
         const sp = JAR_SPOON;
 
         const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 14);
-        floor.friction = 0.72;
+        floor.friction = 0.42;
         floor.restitution = 0;
 
         const bodyH = JAR.floorY - s.bodyTopY;
@@ -388,14 +388,14 @@
         const taperRight = wall(s.taperRight - 4, taperCY, 10, taperH, -0.35);
 
         const spoonRamp = wall(sp.rampCenterX, sp.rampCenterY, sp.rampLength, sp.rampWidth, sp.rampAngle);
-        spoonRamp.friction = 0.36;
-        spoonRamp.restitution = 0.01;
+        spoonRamp.friction = 0.14;
+        spoonRamp.restitution = 0.02;
 
         const spoonGuard = wall(sp.guardCenterX, sp.guardCenterY, sp.guardLength, sp.guardWidth, sp.guardAngle);
-        spoonGuard.friction = 0.3;
+        spoonGuard.friction = 0.1;
 
         [jarLeft, jarRight, taperLeft, taperRight]
-          .forEach((segment) => { segment.friction = 0.28; });
+          .forEach((segment) => { segment.friction = 0.14; });
 
         return [floor, jarLeft, jarRight, taperLeft, taperRight, spoonRamp, spoonGuard];
       }
@@ -832,12 +832,12 @@
 
         const tunedGift = isTunedJar;
         const gift = Bodies.circle(x, y, radius, {
-          restitution: tunedGift ? 0.05 : 0.2,
-          friction: tunedGift ? 0.42 : 0.3,
-          frictionStatic: tunedGift ? 0.5 : 0.36,
-          frictionAir: tunedGift ? 0.012 : 0.009,
+          restitution: isUltraJar ? 0.03 : (tunedGift ? 0.05 : 0.2),
+          friction: isUltraJar ? 0.18 : (tunedGift ? 0.42 : 0.3),
+          frictionStatic: isUltraJar ? 0.22 : (tunedGift ? 0.5 : 0.36),
+          frictionAir: isUltraJar ? 0.004 : (tunedGift ? 0.012 : 0.009),
           density: 0.0009 * (14 / radius),
-          slop: tunedGift ? 0.01 : 0.02,
+          slop: isUltraJar ? 0.008 : (tunedGift ? 0.01 : 0.02),
           render: {
             fillStyle: 'transparent',
             strokeStyle: 'transparent',
@@ -964,12 +964,12 @@
           const radius = body.circleRadius || 12;
           const feetY = body.position.y + radius;
 
-          if (body.speed > 2.0) {
-            Body.setVelocity(body, { x: body.velocity.x * 0.5, y: body.velocity.y * 0.36 });
+          if (body.speed > 2.4) {
+            Body.setVelocity(body, { x: body.velocity.x * 0.72, y: body.velocity.y * 0.55 });
             body.lastNudgeTime = Date.now();
           }
 
-          if (feetY > JAR.floorY - 2 && body.speed < 0.85 && isReadyToFreeze(body)) {
+          if (feetY > JAR.floorY - 2 && body.speed < 1.1 && isReadyToFreeze(body)) {
             Body.setPosition(body, { x: body.position.x, y: JAR.floorY - radius - 2 });
             freezeGift(body);
           }
@@ -995,10 +995,10 @@
           const nearSpoon = y >= sp.guardCenterY - 30;
 
           if (isUltraOnSpoon(body) || (inFeed && nearSpoon && y < sp.tipY + 6)) {
-            const towardTipX = (sp.tipX - x) * 0.06;
+            const towardTipX = (sp.tipX - x) * 0.05;
             Body.setVelocity(body, {
-              x: body.velocity.x * 0.88 + towardTipX,
-              y: Math.max(body.velocity.y, 1.2 + Math.random() * 0.35)
+              x: body.velocity.x * 0.95 + towardTipX,
+              y: Math.max(body.velocity.y, 0.9 + Math.random() * 0.3)
             });
             body.lastNudgeTime = Date.now();
             return;
@@ -1006,8 +1006,8 @@
 
           if (isUltraAtMouth(body)) {
             Body.setVelocity(body, {
-              x: body.velocity.x * 0.55 + (JAR.centerX - x) * 0.07,
-              y: Math.max(body.velocity.y, 3.4 + Math.random() * 0.55)
+              x: body.velocity.x * 0.78 + (JAR.centerX - x) * 0.05,
+              y: Math.max(body.velocity.y, 2.6 + Math.random() * 0.45)
             });
             body.lastNudgeTime = Date.now();
             return;
@@ -1319,11 +1319,12 @@
           [giftA, giftB].forEach((body) => {
             if (body.label !== 'gift' || body.isStatic) return;
             if (isSpilledGift(body) || isOnSpillFloor(body)) return;
+            if (isUltraJar && isUltraInFeedZone(body.position.x, body.position.y)) return;
             if (!isInsideJarX(body)) return;
             if (body.speed < 1.2) return;
             Body.setVelocity(body, {
-              x: body.velocity.x * 0.58,
-              y: body.velocity.y * 0.35,
+              x: body.velocity.x * (isUltraJar ? 0.82 : 0.58),
+              y: body.velocity.y * (isUltraJar ? 0.55 : 0.35),
             });
             body.lastNudgeTime = Date.now();
           });
