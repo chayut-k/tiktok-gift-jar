@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
+  <title>Gift Floor Physics</title>
+  <script src="/js/floor-config.js?v=1.0.6"></script>
+  <script src="/js/gift-size.js?v=1.0.6"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      background: transparent;
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    body.preview-mode .stage,
+    body.overlay-mode .stage { margin: 0; }
+    body.preview-mode .below-stage {
+      display: block;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 8px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    body.overlay-mode .below-stage { display: none; }
+    body.preview-mode .test-hint {
+      color: #ccc;
+      text-shadow: 0 1px 4px #000;
+    }
+    .stage {
+      position: relative;
+      width: 460px;
+      height: 620px;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+    .floor-img {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: auto;
+      object-fit: fill;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .physics-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .coin-counter {
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 4px 16px;
+      border-radius: 22px;
+      font-size: 17px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .coin-counter img { width: 30px; height: 30px; }
+    body[data-coins="hide"] .coin-counter { display: none; }
+    .label {
+      text-align: center;
+      color: #ffd700;
+      font-size: 23px;
+      margin-top: 15px;
+      text-shadow: 0 3px 12px #000;
+      font-weight: bold;
+    }
+    .test-hint {
+      text-align: center;
+      color: #888;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <img class="floor-img" id="floor-img" src="/images/floor1.png" alt="พื้น">
+    <div class="physics-layer" id="physics-layer"></div>
+    <div class="coin-counter" id="coin-counter">
+      <img src="/images/coin.png" alt="coin">
+      <span id="total">0</span>
+    </div>
+  </div>
+  <div class="below-stage">
+    <div class="label" id="last-gift">รอของขวัญ...</div>
+    <div class="test-hint" id="test-hint">G=1เหรียญ H=20เหรียญ J=100เหรียญ | R=รีเซ็ต | ?debug=1 แสดงกำแพงชน</div>
+  </div>
+
+  <script src="/js/matter.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js?v=1.0.6"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const isPreview = params.get('preview') === '1';
+    const isDebug = params.get('debug') === '1';
+    const isOverlay = !!params.get('user');
+    document.body.dataset.coins = getOverlayCoinsDisplay();
+    const GIFT_SIZE_MULTIPLIER = getOverlayGiftSizeMultiplier();
+    const { floorId, floorConfig } = applyFloorImage('floor-img');
+    const FLOOR = floorConfig.physics;
+    const FLOOR_SPAWN = FLOOR.spawn;
+
+    if (isPreview) document.body.classList.add('preview-mode');
+    else if (isOverlay) document.body.classList.add('overlay-mode');
+
+    const STAGE_W = FLOOR_STAGE_W;
+    const STAGE_H = FLOOR_STAGE_H;
+    const FALLBACK_TEXTURE = '/images/rose.png';
+    const ESCAPE_TOP_Y = -20;
+    const FALLEN_Y = STAGE_H + 80;
+    const SETTLE_IDLE_MS = 10000;
+    const MAX_DYNAMIC_GIFTS = 40;
+    const GIFT_LABELS = ['gift', 'gift-static'];
+    const TEST_GIFT_SIZES = { g: 1, h: 20, j: 100 };
+
+    let total = 0;
+    let giftCount = 0;
+    const imageCache = new Map();
+
+    function initPhysics() {
+      if (typeof Matter === 'undefined') {
+        console.error('Matter.js โหลดไม่สำเร็จ');
+        return;
+      }
+
+      const { Engine, Render, Runner, World, Bodies, Body, Composite, Events } = Matter;
+
+      const engine = Engine.create({
+        enableSleeping: true,
+        positionIterations: 10,
+        velocityIterations: 8,
+      });
+      engine.gravity.y = 1.2;
+
+      const render = Render.create({
+        element: document.getElementById('physics-layer'),
+        engine,
+        options: {
+          width: STAGE_W,
+          height: STAGE_H,
+          wireframes: false,
+          background: 'transparent',
+          pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        },
+      });
+
+      function wall(x, y, w, h, angle = 0) {
+        return Bodies.rectangle(x, y, w, h, {
+          isStatic: true,
+          angle,
+          friction: 0.38,
+          restitution: 0.04,
+          render: isDebug
+            ? { visible: true, fillStyle: 'rgba(255, 48, 48, 0.32)', strokeStyle: '#ff4444', lineWidth: 1 }
+            : { visible: false },
+        });
+      }
+
+      function buildFloorWalls() {
+        const floorY = FLOOR.floorY;
+        const leftX = FLOOR.innerLeft;
+        const rightX = FLOOR.innerRight;
+        const floorWidth = rightX - leftX;
+
+        const ground = wall(FLOOR.centerX, floorY + 6, floorWidth, 14);
+        ground.friction = 0.48;
+
+        const wallH = floorY + 20;
+        const wallCY = wallH / 2;
+        const left = wall(leftX, wallCY, 12, wallH);
+        const right = wall(rightX, wallCY, 12, wallH);
+        left.friction = 0.22;
+        right.friction = 0.22;
+
+        return [ground, left, right];
+      }
+
+      World.add(engine.world, buildFloorWalls());
+
+      function getGiftBodies() {
+        return Composite.allBodies(engine.world).filter((b) => GIFT_LABELS.includes(b.label));
+      }
+
+      function giftRadius(diamonds) {
+        return giftPhysicsRadius(diamonds, GIFT_SIZE_MULTIPLIER);
+      }
+
+      function isInsideBounds(body) {
+        const r = body.circleRadius || 12;
+        return body.position.x >= FLOOR.innerLeft + r - 2
+          && body.position.x <= FLOOR.innerRight - r + 2;
+      }
+
+      function isOnFloor(body) {
+        const r = body.circleRadius || 12;
+        return body.position.y + r >= FLOOR.floorY - 10;
+      }
+
+      function canSettleGift(body) {
+        return isOnFloor(body) && body.speed < 2.2;
+      }
+
+      function freezeGift(body) {
+        if (!body || body.isStatic || body.frozen) return;
+        if (!canSettleGift(body)) return;
+        Body.setStatic(body, true);
+        Body.setVelocity(body, { x: 0, y: 0 });
+        Body.setAngularVelocity(body, 0);
+        body.label = 'gift-static';
+        body.frozen = true;
+      }
+
+      function isReadyToFreeze(body) {
+        if (!canSettleGift(body)) return false;
+        return Date.now() - (body.spawnTime || 0) >= SETTLE_IDLE_MS;
+      }
+
+      function loadGiftImage(url) {
+        const src = url || FALLBACK_TEXTURE;
+        if (imageCache.has(src)) return imageCache.get(src);
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = src;
+        imageCache.set(src, img);
+        img.onerror = () => {
+          if (src !== FALLBACK_TEXTURE) imageCache.set(src, loadGiftImage(FALLBACK_TEXTURE));
+        };
+        return img;
+      }
+
+      function createGift(data) {
+        const diamonds = Number(data.diamonds) || 1;
+        const radius = giftRadius(diamonds);
+        const spawn = FLOOR_SPAWN;
+        const x = spawn.centerX + (Math.random() - 0.5) * spawn.halfWidth * spawn.spread;
+        const y = spawn.y - spawn.lift - Math.random() * spawn.jitter - Math.max(0, radius - 12);
+
+        const gift = Bodies.circle(x, y, radius, {
+          restitution: 0.12,
+          friction: 0.28,
+          frictionStatic: 0.32,
+          frictionAir: 0.006,
+          density: 0.0009 * (14 / radius),
+          slop: 0.015,
+          render: { fillStyle: 'transparent', strokeStyle: 'transparent', lineWidth: 0 },
+        });
+
+        gift.label = 'gift';
+        gift.giftImage = loadGiftImage(data.giftPictureUrl);
+        gift.spawnTime = Date.now();
+        gift.lastMoveTime = gift.spawnTime;
+        gift.sleepThreshold = Infinity;
+
+        World.add(engine.world, gift);
+        Body.setAngularVelocity(gift, (Math.random() - 0.5) * 0.1);
+        Body.setVelocity(gift, {
+          x: (Math.random() - 0.5) * 0.35,
+          y: 0.6 + Math.random() * 0.4,
+        });
+
+        giftCount++;
+        enforceDynamicLimit();
+      }
+
+      function enforceDynamicLimit() {
+        const dynamic = getGiftBodies().filter((b) => b.label === 'gift');
+        if (dynamic.length <= MAX_DYNAMIC_GIFTS) return;
+        dynamic
+          .filter(isReadyToFreeze)
+          .sort((a, b) => b.position.y - a.position.y)
+          .slice(0, dynamic.length - MAX_DYNAMIC_GIFTS)
+          .forEach(freezeGift);
+      }
+
+      function removeEscapedGifts() {
+        const escaped = getGiftBodies().filter((b) => {
+          const r = b.circleRadius || 12;
+          return b.position.y > FALLEN_Y || b.position.y - r < ESCAPE_TOP_Y;
+        });
+        if (escaped.length) World.remove(engine.world, escaped);
+      }
+
+      function recoverSideLeaks() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          const r = body.circleRadius || 12;
+          const minX = FLOOR.innerLeft + r - 1;
+          const maxX = FLOOR.innerRight - r + 1;
+          let nudged = false;
+
+          if (body.position.x < minX - 2) {
+            Body.setPosition(body, { x: minX, y: body.position.y });
+            Body.setVelocity(body, { x: Math.max(0.05, body.velocity.x * 0.1), y: body.velocity.y * 0.85 });
+            nudged = true;
+          } else if (body.position.x > maxX + 2) {
+            Body.setPosition(body, { x: maxX, y: body.position.y });
+            Body.setVelocity(body, { x: Math.min(-0.05, body.velocity.x * 0.1), y: body.velocity.y * 0.85 });
+            nudged = true;
+          }
+
+          if (nudged) body.lastNudgeTime = Date.now();
+        });
+      }
+
+      function stabilizeFloorStack() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (!isInsideBounds(body)) return;
+
+          const r = body.circleRadius || 12;
+          const feetY = body.position.y + r;
+
+          if (feetY > FLOOR.floorY - 1 && body.speed < 1.0 && isReadyToFreeze(body)) {
+            Body.setPosition(body, { x: body.position.x, y: FLOOR.floorY - r - 2 });
+            freezeGift(body);
+          }
+        });
+      }
+
+      function settleIdleGifts() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isReadyToFreeze(body)) freezeGift(body);
+        });
+      }
+
+      function resetFloor() {
+        World.remove(engine.world, getGiftBodies());
+        giftCount = 0;
+      }
+
+      Events.on(render, 'afterRender', () => {
+        const ctx = render.context;
+        for (const body of getGiftBodies()) {
+          const img = body.giftImage;
+          const r = body.circleRadius;
+          const pos = body.position;
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          if (!body.isStatic) ctx.rotate(body.angle);
+          if (img && img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, -r, -r, r * 2, r * 2);
+          } else {
+            ctx.fillStyle = '#ff4d8d';
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+      });
+
+      Events.on(engine, 'sleepStart', (event) => {
+        const body = event.body;
+        if (body?.label === 'gift' && isReadyToFreeze(body)) freezeGift(body);
+      });
+
+      Events.on(engine, 'beforeUpdate', () => {
+        removeEscapedGifts();
+        recoverSideLeaks();
+        stabilizeFloorStack();
+        settleIdleGifts();
+      });
+
+      function spawnTestGift(diamonds) {
+        createGift({ giftPictureUrl: FALLBACK_TEXTURE, diamonds });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (key === 'g') spawnTestGift(TEST_GIFT_SIZES.g);
+        if (key === 'h') spawnTestGift(TEST_GIFT_SIZES.h);
+        if (key === 'j') spawnTestGift(TEST_GIFT_SIZES.j);
+        if (key === 'r') resetFloor();
+      });
+
+      if (!isPreview) {
+        const socket = createOverlaySocket();
+        socket.on('gift', (data) => {
+          if (!data.user) return;
+          total = data.total || total;
+          document.getElementById('total').textContent = total.toLocaleString('th-TH');
+          document.getElementById('last-gift').textContent =
+            `${data.user} ส่ง ${data.giftName}`;
+          const repeatCount = Number(data.repeatCount) || 0;
+          if (repeatCount <= 0) return;
+          const count = Math.min(repeatCount, 5);
+          for (let i = 0; i < count; i++) {
+            setTimeout(() => createGift(data), i * 180);
+          }
+        });
+      } else {
+        let previewCount = 0;
+        const previewSizes = [1, 20, 100];
+        const previewTimer = setInterval(() => {
+          spawnTestGift(previewSizes[previewCount % previewSizes.length]);
+          previewCount++;
+          if (previewCount >= 24) clearInterval(previewTimer);
+        }, 500);
+      }
+
+      Render.run(render);
+      Runner.run(Runner.create(), engine);
+    }
+
+    initPhysics();
+  </script>
+</body>
+</html>

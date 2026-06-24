@@ -1,7 +1,7 @@
 const STAGE_CENTER_X = 230;
 
 // จูนจาก *-marking.png → stage 460×620, object-fit:contain
-// jar1/jar6 = jar1and6-marking (960×1072) | jar4 = jar4-marking | jar5 = jar5-marking | ultra = ultra-marking (976×1056)
+// jar1/jar6/jar7 = jar1and6-marking (960×1072) | jar4 = jar4-marking | jar5 = jar5-marking | ultra = ultra-marking (976×1056)
 const JAR_CONFIGS = {
   jar1: {
     label: 'โถแก้ว Mason (jar1)',
@@ -231,12 +231,39 @@ const JAR_CONFIGS = {
       liquidWidth: '56%',
       coinBottom: 44
     }
+  },
+  jar7: {
+    label: 'โถแก้วกุหลาบ (jar7)',
+    image: '/images/jar7.png',
+    physics: {
+      centerX: STAGE_CENTER_X,
+      floorY: 541,
+      innerLeft: 113,
+      innerRight: 358,
+      wallTopY: 220,
+      mouthY: 88,
+      mouthHalfWidth: 53,
+      neckInset: 19,
+      floorWidth: 198,
+      wallHeight: 242,
+      wallCenterY: 421
+    },
+    classic: {
+      giftsBottom: 95,
+      giftsLeft: 80,
+      giftsWidth: '68%',
+      giftsHeight: 255,
+      liquidBottom: 88,
+      liquidLeft: 85,
+      liquidWidth: '65%',
+      coinBottom: 45
+    }
   }
 };
 
 const DEFAULT_JAR = 'jar1';
 
-const NUMERIC_JAR_MAP = { 1: 'jar1', 4: 'jar4', 5: 'jar5', 6: 'jar6', 7: 'ultra' };
+const NUMERIC_JAR_MAP = { 1: 'jar1', 4: 'jar4', 5: 'jar5', 6: 'jar6', 7: 'jar7' };
 
 function getJarFromQuery() {
   const jar = new URLSearchParams(window.location.search).get('jar');
