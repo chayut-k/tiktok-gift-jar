@@ -5,15 +5,14 @@ const FLOOR_CONFIGS = {
   floor1: {
     label: 'พื้นหญ้า (floor1)',
     image: '/images/floor1.png',
-    imageWidth: 2172,
+    imageWidth: 3172,
     imageHeight: 724,
     physics: {
       centerX: 230,
       innerLeft: 8,
       innerRight: 452,
-      // ผิวหญ้าด้านบนของรูป (≈12% จากขอบบน sprite)
-      surfaceOffsetRatio: 0.12,
-      floorY: 514,
+      surfaceOffsetRatio: 0.27,
+      floorY: 544,
       spawn: {
         centerX: 230,
         y: 64,
@@ -25,16 +24,37 @@ const FLOOR_CONFIGS = {
     },
   },
   floor2: {
-    label: 'พื้นเค้ก (floor2)',
-    image: '/images/floor2.jpg',
-    imageWidth: 2816,
-    imageHeight: 368,
+    label: 'พื้นม่วง (floor2)',
+    image: '/images/floor2.png',
+    imageWidth: 2144,
+    imageHeight: 480,
     physics: {
       centerX: 230,
       innerLeft: 8,
       innerRight: 452,
-      surfaceOffsetRatio: 0.08,
-      floorY: 568,
+      surfaceOffsetRatio: 0.27,
+      floorY: 545,
+      spawn: {
+        centerX: 230,
+        y: 64,
+        halfWidth: 145,
+        spread: 0.85,
+        lift: 8,
+        jitter: 10,
+      },
+    },
+  },
+  floor3: {
+    label: 'พื้นเค้ก (floor3)',
+    image: '/images/floor3.png',
+    imageWidth: 2128,
+    imageHeight: 480,
+    physics: {
+      centerX: 230,
+      innerLeft: 8,
+      innerRight: 452,
+      surfaceOffsetRatio: 0.21,
+      floorY: 538,
       spawn: {
         centerX: 230,
         y: 64,
@@ -49,7 +69,7 @@ const FLOOR_CONFIGS = {
 
 const DEFAULT_FLOOR = 'floor1';
 
-const NUMERIC_FLOOR_MAP = { 1: 'floor1', 2: 'floor2' };
+const NUMERIC_FLOOR_MAP = { 1: 'floor1', 2: 'floor2', 3: 'floor3' };
 
 function getFloorDisplayHeight(config) {
   const imgW = config.imageWidth || FLOOR_STAGE_W;
