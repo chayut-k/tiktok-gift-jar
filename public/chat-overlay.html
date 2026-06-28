@@ -71,7 +71,7 @@
   <div class="chat-container" id="chat"></div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/overlay-socket.js?v=1.0.3"></script>
+  <script src="/js/overlay-socket.js?v=1.0.8"></script>
   <script>
     document.body.dataset.bg = getOverlayBgId();
     const socket = createOverlaySocket();
@@ -82,15 +82,16 @@
       const messageDiv = document.createElement('div');
       messageDiv.className = 'chat-message';
 
-      const avatarHtml = data.avatar 
-        ? `<img src="${data.avatar}" class="avatar" alt="" onerror="this.style.display='none'">` 
+      const safeAvatar = sanitizeImageUrl(data.avatar);
+      const avatarHtml = safeAvatar
+        ? `<img src="${safeAvatar}" class="avatar" alt="" onerror="this.style.display='none'">`
         : `<div class="avatar" style="background:#555; display:flex; align-items:center; justify-content:center; font-size:16px;">👤</div>`;
 
       messageDiv.innerHTML = `
         ${avatarHtml}
         <div class="message-content">
-          <span class="username">${data.nickname}</span>
-          <span class="comment">${data.comment}</span>
+          <span class="username">${escapeHtml(data.nickname)}</span>
+          <span class="comment">${escapeHtml(data.comment)}</span>
         </div>
       `;
 

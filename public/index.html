@@ -1056,7 +1056,6 @@
       const ttTargetIdc = document.getElementById('tiktokTargetIdc')?.value.trim();
       if (sessionId) payload.sessionId = sessionId;
       if (ttTargetIdc) payload.ttTargetIdc = ttTargetIdc;
-      if (currentUser?.email) payload.email = currentUser.email;
       return payload;
     }
 
@@ -1187,7 +1186,7 @@
       }
     }
 
-    const OVERLAY_ASSET_VERSION = '1.0.7';
+    const OVERLAY_ASSET_VERSION = '1.0.8';
 
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);

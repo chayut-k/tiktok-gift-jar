@@ -1326,11 +1326,11 @@ app.post('/connect-tiktok', connectLimiter, async (req, res) => {
 
 app.post('/save-tiktok', connectLimiter, async (req, res) => {
   try {
+    const email = getSessionEmail(req);
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
-    const email = sanitizeEmail(req.body?.email) || getSessionEmail(req);
 
-    if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
     if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
+    if (!tiktokUsername) return res.status(400).json({ error: 'TikTok Username ไม่ถูกต้อง' });
 
     touchDashboardHttpPresence(email);
 

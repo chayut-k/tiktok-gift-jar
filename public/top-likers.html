@@ -138,7 +138,7 @@
   <div id="container"></div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/overlay-socket.js?v=1.0.3"></script>
+  <script src="/js/overlay-socket.js?v=1.0.8"></script>
   <script>
     document.body.dataset.bg = getOverlayBgId();
     document.body.dataset.nameColor = getOverlayNameColorId();
@@ -152,13 +152,14 @@
       if (rank === 1) return '<span class="medal">🥇</span>';
       if (rank === 2) return '<span class="medal">🥈</span>';
       if (rank === 3) return '<span class="medal">🥉</span>';
-      return `<span style="color:#ccc;font-size:16px;">${rank}.</span>`;
+      return `<span style="color:#ccc;font-size:16px;">${Number(rank)}.</span>`;
     }
 
     function getAvatarHtml(liker) {
       const avatarClass = liker.rank <= 3 ? 'avatar avatar-bordered' : 'avatar avatar-plain';
-      if (liker.avatar) {
-        return `<img src="${liker.avatar}" class="${avatarClass}" onerror="this.style.display='none'">`;
+      const safeAvatar = sanitizeImageUrl(liker.avatar);
+      if (safeAvatar) {
+        return `<img src="${safeAvatar}" class="${avatarClass}" onerror="this.style.display='none'">`;
       }
       return `<div class="${avatarClass} avatar-placeholder">👤</div>`;
     }
@@ -173,7 +174,7 @@
           <div class="rank-container">${getMedal(liker.rank)}</div>
           ${getAvatarHtml(liker)}
           <div class="info">
-            <div class="nickname">${liker.nickname || liker.username}</div>
+            <div class="nickname">${escapeHtml(liker.nickname || liker.username)}</div>
             <div class="likes">❤️ ${liker.likes.toLocaleString()}</div>
           </div>
         `;

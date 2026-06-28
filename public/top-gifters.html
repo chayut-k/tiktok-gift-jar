@@ -77,7 +77,7 @@
   <div id="container"></div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/overlay-socket.js"></script>
+  <script src="/js/overlay-socket.js?v=1.0.8"></script>
   <script>
     document.body.dataset.bg = getOverlayBgId();
     const socket = createOverlaySocket();
@@ -97,8 +97,9 @@
         const div = document.createElement('div');
         div.className = 'gifter';
 
-        const avatarHtml = gifter.avatar
-          ? `<img src="${gifter.avatar}" class="avatar" onerror="this.style.display='none'">`
+        const safeAvatar = sanitizeImageUrl(gifter.avatar);
+        const avatarHtml = safeAvatar
+          ? `<img src="${safeAvatar}" class="avatar" onerror="this.style.display='none'">`
           : `<div class="avatar" style="background:#555; display:flex; align-items:center; justify-content:center; font-size:20px; color:#aaa;">👤</div>`;
 
         div.innerHTML = `
@@ -107,7 +108,7 @@
           </div>
           ${avatarHtml}
           <div class="info">
-            <div class="nickname">${gifter.nickname || gifter.username}</div>
+            <div class="nickname">${escapeHtml(gifter.nickname || gifter.username)}</div>
             <div class="diamonds">
               <img src="images/coin.png" class="coin-icon" alt="">
               ${gifter.diamonds.toLocaleString()}
