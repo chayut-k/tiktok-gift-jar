@@ -1075,7 +1075,7 @@
         const minutes = Math.max(1, Math.ceil(retryAfter / 60));
         return `⏳ คำขอมากเกินไป ลองใหม่ใน ~${minutes} นาที`;
       }
-      return '⏳ คำขอมากเกินไป ลองใหม่อีกครั้งใน 10–15 นาที';
+      return '⏳ คำขอมากเกินไป ลองใหม่อีกครั้งใน 5–15 นาที';
     }
 
     async function requestSaveTiktok(tiktokUsername) {

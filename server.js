@@ -193,14 +193,24 @@ function getConnectRateLimitKey(req) {
   return `connect:ip:${ipKeyGenerator(req.ip || 'unknown')}`;
 }
 
-const connectLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: isProd ? 25 : 30,
+const connectLimitBase = {
   standardHeaders: true,
   legacyHeaders: false,
   message: jsonError('เชื่อมต่อ TikTok บ่อยเกินไป กรุณารอสักครู่'),
   keyGenerator: getConnectRateLimitKey,
   validate: { trustProxy: isProd },
+};
+
+const connectBurstLimiter = rateLimit({
+  ...connectLimitBase,
+  windowMs: 5 * 60 * 1000,
+  max: isProd ? 10 : 30,
+});
+
+const connectWindowLimiter = rateLimit({
+  ...connectLimitBase,
+  windowMs: 15 * 60 * 1000,
+  max: isProd ? 15 : 30,
 });
 
 app.use('/api/', generalLimiter);
@@ -1305,7 +1315,7 @@ function saveTikTokUserCredentials(email, body) {
 }
 
 // ================== Protected Actions ==================
-app.post('/connect-tiktok', connectLimiter, async (req, res) => {
+app.post('/connect-tiktok', connectBurstLimiter, connectWindowLimiter, async (req, res) => {
   try {
     const email = getSessionEmail(req);
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
@@ -1332,7 +1342,7 @@ app.post('/connect-tiktok', connectLimiter, async (req, res) => {
   }
 });
 
-app.post('/save-tiktok', connectLimiter, async (req, res) => {
+app.post('/save-tiktok', connectBurstLimiter, connectWindowLimiter, async (req, res) => {
   try {
     const email = getSessionEmail(req);
     const tiktokUsername = sanitizeTikTokUsername(req.body?.tiktokUsername);
