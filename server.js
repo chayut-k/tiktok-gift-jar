@@ -17,7 +17,7 @@ const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const helmet = require('helmet');
 const compression = require('compression');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const {
   normalizeTikTokUser,
   normalizeChatEvent,
@@ -187,12 +187,20 @@ const actionLimiter = rateLimit({
   message: jsonError('ดำเนินการบ่อยเกินไป กรุณารอสักครู่'),
 });
 
+function getConnectRateLimitKey(req) {
+  const cleaned = String(req.session?.user?.email || '').trim().toLowerCase();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned)) return `connect:user:${cleaned}`;
+  return `connect:ip:${ipKeyGenerator(req.ip || 'unknown')}`;
+}
+
 const connectLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isProd ? 5 : 30,
+  max: isProd ? 25 : 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: jsonError('เชื่อมต่อ TikTok บ่อยเกินไป กรุณารอสักครู่'),
+  keyGenerator: getConnectRateLimitKey,
+  validate: { trustProxy: isProd },
 });
 
 app.use('/api/', generalLimiter);

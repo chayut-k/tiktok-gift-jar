@@ -1059,6 +1059,59 @@
       return payload;
     }
 
+    let tiktokActionInFlight = false;
+
+    function setTikTokActionBusy(busy) {
+      tiktokActionInFlight = busy;
+      const connectBtn = document.getElementById('connectBtn');
+      const saveOnlyBtn = document.getElementById('saveOnlyBtn');
+      if (connectBtn) connectBtn.disabled = busy;
+      if (saveOnlyBtn) saveOnlyBtn.disabled = busy;
+    }
+
+    function formatRateLimitMessage(res) {
+      const retryAfter = Number(res.headers.get('Retry-After'));
+      if (Number.isFinite(retryAfter) && retryAfter > 0) {
+        const minutes = Math.max(1, Math.ceil(retryAfter / 60));
+        return `⏳ คำขอมากเกินไป ลองใหม่ใน ~${minutes} นาที`;
+      }
+      return '⏳ คำขอมากเกินไป ลองใหม่อีกครั้งใน 10–15 นาที';
+    }
+
+    async function requestSaveTiktok(tiktokUsername) {
+      if (tiktokActionInFlight) {
+        showMessage('กำลังดำเนินการอยู่ กรุณารอสักครู่...', true);
+        return null;
+      }
+
+      setTikTokActionBusy(true);
+      try {
+        const res = await fetch('/save-tiktok', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(getTikTokConnectPayload(tiktokUsername)),
+        });
+
+        if (res.status === 429) {
+          showMessage(formatRateLimitMessage(res), true);
+          return null;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showMessage('❌ ' + (data.error || 'เชื่อมต่อล้มเหลว'), true);
+          return null;
+        }
+        return data;
+      } catch (err) {
+        showMessage('❌ ไม่สามารถติดต่อเซิร์ฟเวอร์ได้', true);
+        return null;
+      } finally {
+        setTikTokActionBusy(false);
+      }
+    }
+
     // ================== TikTok Connection ==================
     async function connectTikTok() {
       const tiktokUsername = document.getElementById('tiktokUsername').value.trim();
@@ -1074,35 +1127,28 @@
       updateConnectionStatus(false, tiktokUsername, true);
       await prepareDashboardConnection();
 
-      try {
-        const res = await fetch('/save-tiktok', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(getTikTokConnectPayload(tiktokUsername))
-        });
-        const data = await res.json();
+      const data = await requestSaveTiktok(tiktokUsername);
+      if (!data) {
+        updateConnectionStatus(false, tiktokUsername);
+        updateOverlayUI();
+        return;
+      }
 
-        if (data.success) {
-          connectedUsername = tiktokUsername;
-          if (data.waiting) {
-            isConnected = false;
-            updateConnectionStatus(false, tiktokUsername, false, true);
-            showMessage('⏳ ยังไม่ขึ้นไลฟ์ — ระบบจะเชื่อมต่ออัตโนมัติเมื่อคุณเริ่มไลฟ์', false);
-          } else {
-            isConnected = true;
-            updateConnectionStatus(true, tiktokUsername);
-            showMessage('✅ เชื่อมต่อสำเร็จ!', false);
-          }
-          updateOverlayUI();
+      if (data.success) {
+        connectedUsername = tiktokUsername;
+        if (data.waiting) {
+          isConnected = false;
+          updateConnectionStatus(false, tiktokUsername, false, true);
+          showMessage('⏳ ยังไม่ขึ้นไลฟ์ — ระบบจะเชื่อมต่ออัตโนมัติเมื่อคุณเริ่มไลฟ์', false);
         } else {
-          showMessage('❌ ' + (data.error || 'เชื่อมต่อล้มเหลว'), true);
-          updateConnectionStatus(false, tiktokUsername);
-          updateOverlayUI();
+          isConnected = true;
+          updateConnectionStatus(true, tiktokUsername);
+          showMessage('✅ เชื่อมต่อสำเร็จ!', false);
         }
-      } catch (err) {
-        showMessage('❌ ไม่สามารถติดต่อเซิร์ฟเวอร์ได้', true);
-        updateConnectionStatus(false);
+        updateOverlayUI();
+      } else {
+        showMessage('❌ ' + (data.error || 'เชื่อมต่อล้มเหลว'), true);
+        updateConnectionStatus(false, tiktokUsername);
         updateOverlayUI();
       }
     }
@@ -1115,20 +1161,14 @@
 
       await prepareDashboardConnection();
 
-      fetch('/save-tiktok', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(getTikTokConnectPayload(tiktokUsername))
-      })
-      .then(r => r.json())
-      .then(data => {
-        if (data.success) {
-          showMessage('บันทึกข้อมูลเรียบร้อย (ยังไม่ได้เชื่อมต่อ)', false);
-        } else {
-          showMessage(data.error || 'บันทึกไม่สำเร็จ', true);
-        }
-      });
+      const data = await requestSaveTiktok(tiktokUsername);
+      if (!data) return;
+
+      if (data.success) {
+        showMessage('บันทึกข้อมูลเรียบร้อย (ยังไม่ได้เชื่อมต่อ)', false);
+      } else {
+        showMessage(data.error || 'บันทึกไม่สำเร็จ', true);
+      }
     }
 
     async function disconnectTikTok() {
@@ -1186,7 +1226,7 @@
       }
     }
 
-    const OVERLAY_ASSET_VERSION = '1.0.8';
+    const OVERLAY_ASSET_VERSION = '1.0.9';
 
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);
