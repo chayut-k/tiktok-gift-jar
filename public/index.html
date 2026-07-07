@@ -769,6 +769,10 @@
 
     // ================== Dashboard Socket ==================
     function handleSocketStatus(data) {
+      if (data.connected || data.reason === 'waiting_for_live') {
+        stopAutoConnectCycle();
+      }
+
       const keepUsername = data.reason === 'reconnecting'
         || data.reason === 'auto_connecting'
         || data.reason === 'disconnected'
@@ -1031,14 +1035,14 @@
         } else if (status.reconnecting && username) {
           isConnected = false;
           updateConnectionStatus(false, username, true);
-          showMessage('🔄 เปิด Dashboard — กำลังเชื่อมต่อ TikTok อัตโนมัติ...', false);
+          showMessage('🔄 กำลังเชื่อมต่อ TikTok ใหม่...', false);
         } else if (status.connectionPaused) {
           isConnected = false;
           updateConnectionStatus(false, username);
         } else if (username) {
           isConnected = false;
-          updateConnectionStatus(false, username, true);
-          showMessage('🔄 เปิด Dashboard — กำลังเชื่อมต่อ TikTok อัตโนมัติ...', false);
+          updateConnectionStatus(false, username);
+          startAutoConnectIfNeeded(status, username);
         } else {
           isConnected = false;
           updateConnectionStatus(false);
@@ -1059,7 +1063,85 @@
       return payload;
     }
 
+    const AUTO_CONNECT_MAX_ATTEMPTS = 3;
+    const AUTO_CONNECT_RETRY_DELAY_SEC = 30;
+
     let tiktokActionInFlight = false;
+    let autoConnectSessionId = 0;
+    let autoConnectRunning = false;
+
+    function stopAutoConnectCycle() {
+      autoConnectSessionId += 1;
+      autoConnectRunning = false;
+    }
+
+    function startAutoConnectIfNeeded(status, username) {
+      if (autoConnectRunning) return;
+      if (!username || !currentUser?.email) return;
+      if (status?.connected) return;
+      if (status?.waitingForLive) return;
+      if (status?.connectionPaused) return;
+      if (status?.reconnecting) return;
+      runAutoConnectCycle(username);
+    }
+
+    async function runAutoConnectCycle(username) {
+      const sessionId = ++autoConnectSessionId;
+      autoConnectRunning = true;
+
+      try {
+        for (let attempt = 1; attempt <= AUTO_CONNECT_MAX_ATTEMPTS; attempt++) {
+          if (sessionId !== autoConnectSessionId) return;
+
+          showMessage(`🔄 กำลังเชื่อมต่ออัตโนมัติ (${attempt}/${AUTO_CONNECT_MAX_ATTEMPTS})...`, false);
+          updateConnectionStatus(false, username, true);
+          updateOverlayUI();
+
+          await prepareDashboardConnection();
+          const data = await requestSaveTiktok(username);
+          if (sessionId !== autoConnectSessionId) return;
+          if (data?.rateLimited) return;
+
+          if (data?.success) {
+            connectedUsername = username;
+            if (data.waiting) {
+              isConnected = false;
+              updateConnectionStatus(false, username, false, true);
+              showMessage('⏳ ยังไม่ขึ้นไลฟ์ — ระบบจะเชื่อมต่ออัตโนมัติเมื่อคุณเริ่มไลฟ์', false);
+            } else {
+              isConnected = true;
+              updateConnectionStatus(true, username);
+              showMessage('✅ เชื่อมต่อสำเร็จ!', false);
+            }
+            updateOverlayUI();
+            return;
+          }
+
+          if (attempt >= AUTO_CONNECT_MAX_ATTEMPTS) {
+            updateConnectionStatus(false, username);
+            showMessage(
+              `❌ เชื่อมต่ออัตโนมัติไม่สำเร็จ (${AUTO_CONNECT_MAX_ATTEMPTS}/${AUTO_CONNECT_MAX_ATTEMPTS}) — กรุณากด「เชื่อมต่อ」ด้วยตนเอง`,
+              true
+            );
+            updateOverlayUI();
+            return;
+          }
+
+          for (let sec = AUTO_CONNECT_RETRY_DELAY_SEC; sec >= 1; sec--) {
+            if (sessionId !== autoConnectSessionId) return;
+            showMessage(
+              `⏳ เชื่อมต่อไม่สำเร็จ (${attempt}/${AUTO_CONNECT_MAX_ATTEMPTS}) — ลองอีกครั้งใน ${sec} วิ...`,
+              false
+            );
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+      } finally {
+        if (sessionId === autoConnectSessionId) {
+          autoConnectRunning = false;
+        }
+      }
+    }
 
     function setTikTokActionBusy(busy) {
       tiktokActionInFlight = busy;
@@ -1095,7 +1177,7 @@
 
         if (res.status === 429) {
           showMessage(formatRateLimitMessage(res), true);
-          return null;
+          return { success: false, rateLimited: true };
         }
 
         const data = await res.json().catch(() => ({}));
@@ -1123,6 +1205,7 @@
         return showMessage('กรุณา Login ด้วย Google ก่อน', true);
       }
 
+      stopAutoConnectCycle();
       showMessage('กำลังเชื่อมต่อ...', false);
       updateConnectionStatus(false, tiktokUsername, true);
       await prepareDashboardConnection();
@@ -1172,6 +1255,7 @@
     }
 
     async function disconnectTikTok() {
+      stopAutoConnectCycle();
       try {
         await fetch('/disconnect-tiktok', { method: 'POST', credentials: 'include' });
         isConnected = false;
@@ -1226,7 +1310,7 @@
       }
     }
 
-    const OVERLAY_ASSET_VERSION = '1.0.9';
+    const OVERLAY_ASSET_VERSION = '1.0.11';
 
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);

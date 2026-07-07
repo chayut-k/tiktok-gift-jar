@@ -289,8 +289,7 @@ function createStreamState(email) {
     reconnectAttempt: 0,
     waitingForLive: false,
     waitForLiveTimer: null,
-    autoConnectInFlight: false,
-    autoConnectScheduleTimer: null,
+
   };
 }
 
@@ -471,16 +470,9 @@ function clearReconnectTimer(stream) {
   stream.reconnectTimer = null;
 }
 
-function clearAutoConnectScheduleTimer(stream) {
-  if (!stream?.autoConnectScheduleTimer) return;
-  clearTimeout(stream.autoConnectScheduleTimer);
-  stream.autoConnectScheduleTimer = null;
-}
-
 function clearStreamTimers(stream) {
   clearDashboardGraceTimer(stream);
   clearReconnectTimer(stream);
-  clearAutoConnectScheduleTimer(stream);
   stopWaitForLive(stream);
 }
 
@@ -582,7 +574,6 @@ function disconnectUserStream(email, reason = 'manual') {
 
   clearStreamTimers(stream);
   stream.reconnectAttempt = 0;
-  stream.autoConnectInFlight = false;
   stopTikTokConnection(stream);
 
   clearUsernameOwner(stream.tiktokUsername, email);
@@ -596,57 +587,6 @@ function disconnectUserStream(email, reason = 'manual') {
 
   emitStreamStatus(email, false, reason ? { reason } : {});
   console.log(`🔌 ตัดการเชื่อมต่อของ ${email} (${reason})`);
-}
-
-async function tryAutoConnectOnDashboardOpen(email) {
-  const savedUsername = sanitizeTikTokUsername(users[email]?.tiktokUsername);
-  if (!savedUsername) return;
-  if (users[email]?.connectionPaused) return;
-
-  const stream = getOrCreateStream(email);
-  if (!shouldKeepStreamAlive(stream)) return;
-  if (stream.connection || stream.connecting || stream.reconnectTimer || stream.waitingForLive) return;
-  if (stream.autoConnectInFlight) return;
-
-  stream.autoConnectInFlight = true;
-  console.log(`🔁 [${email}] Dashboard reopened — auto-connect @${savedUsername}`);
-  emitStreamStatus(email, false, {
-    reason: 'auto_connecting',
-    username: savedUsername,
-    attempt: 1,
-  });
-
-  try {
-    await connectOrWaitForLive(email, savedUsername);
-  } catch (err) {
-    console.error(`Auto-connect failed [${email}]:`, err.message || err);
-    emitStreamStatus(email, false, {
-      reason: 'error',
-      username: savedUsername,
-    });
-  } finally {
-    stream.autoConnectInFlight = false;
-  }
-}
-
-function scheduleAutoConnectOnDashboardOpen(email) {
-  if (!email) return;
-  const savedUsername = sanitizeTikTokUsername(users[email]?.tiktokUsername);
-  if (!savedUsername || users[email]?.connectionPaused) return;
-
-  const stream = getOrCreateStream(email);
-  if (stream.connection || stream.connecting || stream.reconnectTimer
-    || stream.waitingForLive || stream.autoConnectInFlight) {
-    return;
-  }
-
-  clearAutoConnectScheduleTimer(stream);
-  stream.autoConnectScheduleTimer = setTimeout(() => {
-    stream.autoConnectScheduleTimer = null;
-    tryAutoConnectOnDashboardOpen(email).catch((err) => {
-      console.error(`Scheduled auto-connect failed [${email}]:`, err.message || err);
-    });
-  }, 400);
 }
 
 function scheduleDashboardGraceDisconnect(email) {
@@ -773,8 +713,6 @@ function registerDashboardSocket(socket, email) {
 
   if (stream.waitingForLive && !stream.waitForLiveTimer && !stream.connection) {
     pollWaitForLive(email);
-  } else if (!stream.connection && !stream.connecting && !stream.reconnectTimer) {
-    scheduleAutoConnectOnDashboardOpen(email);
   }
 
   console.log(`🖥️ Dashboard online: ${email} (${stream.dashboardSockets.size} tab)`);
@@ -1398,7 +1336,6 @@ app.get('/api/status', (req, res) => {
   if (!email) return res.status(401).json({ error: 'กรุณา Login ก่อน' });
 
   touchDashboardHttpPresence(email);
-  scheduleAutoConnectOnDashboardOpen(email);
 
   const stream = userStreams.get(email);
   const savedUsername = users[email]?.tiktokUsername || null;
@@ -1426,7 +1363,6 @@ app.get('/api/status', (req, res) => {
     reconnecting: !!(
       stream.reconnectTimer
       || stream.connecting
-      || stream.autoConnectInFlight
     ),
   });
 });
