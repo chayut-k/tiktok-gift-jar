@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>TikTok Live Connector</title>
+  <title>TikTok Live Overlay — Gift Jar &amp; Alerts สำหรับสตรีมเมอร์</title>
   <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
@@ -15,6 +15,12 @@
       margin: 0;
     }
     .container { max-width: 560px; margin: 0 auto; }
+    #loginPage.container {
+      max-width: 680px;
+      padding: 0 20px 48px;
+      text-align: left;
+      box-sizing: border-box;
+    }
     #dashboardPage.container {
       max-width: 1140px;
       padding-left: 16px;
@@ -24,10 +30,179 @@
     h1 { margin-bottom: 8px; color: #ff0050; font-size: 28px; }
     h2 { color: #ff0050; font-size: 18px; margin-top: 0; }
 
+    #loginPage h1,
+    #loginPage h2 {
+      margin: 0;
+      line-height: 1.25;
+    }
+
+    .landing-hero {
+      margin: 32px 0 36px;
+      padding: 32px 28px;
+      border-radius: 18px;
+      background:
+        radial-gradient(ellipse 90% 70% at 50% 0%, rgba(255, 0, 80, 0.14), transparent 60%),
+        linear-gradient(160deg, #1a1a22 0%, #121218 100%);
+      border: 1px solid #2e2e3a;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3);
+      text-align: center;
+    }
+    .landing-logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 14px;
+      object-fit: cover;
+      border: 2px solid rgba(255, 0, 80, 0.45);
+      margin: 0 auto 14px;
+      display: block;
+    }
+    .landing-hero h1 {
+      font-size: clamp(28px, 4vw, 40px);
+      background: linear-gradient(90deg, #ff4d8d, #ff0050 45%, #25f4ee);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      margin-bottom: 10px;
+    }
+    .landing-tagline {
+      color: #b8b8c6;
+      font-size: 15px;
+      line-height: 1.7;
+      margin: 0 auto 24px;
+      max-width: 520px;
+    }
+    .landing-signin-card {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid #333;
+      border-radius: 14px;
+      padding: 20px;
+      max-width: 360px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .landing-signin-title {
+      font-size: 14px;
+      color: #aaa;
+      margin: 0 0 12px;
+    }
     .google-signin-wrap {
       display: flex;
       justify-content: center;
-      margin: 16px 0;
+      margin: 0;
+    }
+    .landing-signin-card .google-signin-wrap {
+      justify-content: center;
+      width: 100%;
+    }
+    .landing-signin-card .google-signin-wrap > div {
+      margin: 0 auto;
+    }
+    .landing-privacy {
+      font-size: 12px;
+      color: #666;
+      margin: 12px 0 0;
+      line-height: 1.5;
+    }
+    .landing-section {
+      margin-bottom: 32px;
+    }
+    .landing-section > h2 {
+      font-size: 18px;
+      color: #ff0050;
+      margin-bottom: 6px;
+    }
+    .landing-section > p.landing-section-desc {
+      color: #888;
+      font-size: 14px;
+      margin: 0 0 20px;
+      line-height: 1.55;
+    }
+
+    .landing-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .landing-step {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 14px;
+      padding: 18px 16px;
+    }
+    .landing-step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff0050, #c8004a);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .landing-step h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      color: #f2f2f2;
+    }
+    .landing-step p {
+      margin: 0;
+      font-size: 13px;
+      color: #999;
+      line-height: 1.55;
+    }
+
+    .landing-feature-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .landing-feature-list li {
+      padding: 14px 18px;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .landing-feature-list li:last-child {
+      border-bottom: none;
+    }
+    .landing-feature-list strong {
+      color: #f0f0f0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .landing-feature-list span {
+      color: #888;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .landing-cta {
+      text-align: center;
+      padding: 28px 20px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(255, 0, 80, 0.12), rgba(37, 244, 238, 0.06));
+      border: 1px solid #3a3040;
+    }
+    .landing-cta h2 {
+      color: #fff;
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+    .landing-cta p {
+      color: #999;
+      font-size: 14px;
+      margin: 0 0 16px;
+    }
+    .landing-cta .google-signin-wrap {
+      justify-content: center;
     }
 
     .card {
@@ -181,6 +356,43 @@
       margin-right: 8px;
     }
     .overlay-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+
+    .overlay-tabs {
+      display: flex;
+      gap: 6px;
+      margin: 4px 0 12px;
+      border-bottom: 1px solid #333;
+    }
+    .overlay-tab {
+      padding: 8px 16px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #888;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .overlay-tab:hover { color: #ddd; }
+    .overlay-tab.active {
+      color: #ff0050;
+      border-bottom-color: #ff0050;
+    }
+    .overlay-tab-panel { display: none; }
+    .overlay-tab-panel.active { display: grid; }
+    .overlay-empty-state {
+      grid-column: 1 / -1;
+      padding: 20px 16px;
+      border-radius: 8px;
+      background: #1a1a1a;
+      border: 1px dashed #444;
+      color: #999;
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.5;
+    }
     .jar-picker-row {
       margin-top: 12px;
       padding-top: 12px;
@@ -199,6 +411,70 @@
       cursor: pointer;
     }
     .jar-select:focus { outline: none; border-color: #ff0050; }
+
+    .tts-range-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      width: 100%;
+    }
+    .tts-range-value {
+      min-width: 48px;
+      color: #ddd;
+      font-size: 13px;
+      text-align: right;
+    }
+    input[type="range"].tts-range {
+      -webkit-appearance: none;
+      appearance: none;
+      width: min(260px, 100%);
+      height: 18px;
+      border: none;
+      outline: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"].tts-range::-webkit-slider-runnable-track {
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(
+        to right,
+        #ff0050 0%,
+        #ff0050 var(--range-pct, 0%),
+        #3a3a3a var(--range-pct, 0%),
+        #3a3a3a 100%
+      );
+    }
+    input[type="range"].tts-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid #ff0050;
+      cursor: pointer;
+      margin-top: -4px;
+    }
+    input[type="range"].tts-range::-moz-range-track {
+      height: 10px;
+      border-radius: 999px;
+      background: #3a3a3a;
+    }
+    input[type="range"].tts-range::-moz-range-progress {
+      height: 10px;
+      border-radius: 999px;
+      background: #ff0050;
+    }
+    input[type="range"].tts-range::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      border: 2px solid #ff0050;
+      cursor: pointer;
+    }
     .tlj-setting-row {
       margin: 10px 0 4px;
     }
@@ -370,6 +646,10 @@
         padding-left: 10px;
         padding-right: 10px;
       }
+      #loginPage.container { padding: 0 12px 36px; }
+      .landing-hero { padding: 22px 16px; margin-top: 12px; }
+      .landing-steps { grid-template-columns: 1fr; }
+      .landing-signin-card { max-width: 100%; }
       .overlay-grid { grid-template-columns: 1fr; }
       .overlay-grid .physics-preview-wrap { height: 300px; }
       .overlay-grid .physics-preview-scaler { transform: scale(0.48); }
@@ -379,19 +659,86 @@
 </head>
 <body>
   <div class="container" id="loginPage">
-    <h1>🎥 TikTok Live Overlay</h1>
-    <p style="color:#888">Likes - Gift Jar + Alerts</p>
-    
-    <div id="googleSignInContainer" class="google-signin-wrap"></div>
-    <p style="font-size:12px;color:#555">ข้อมูลของคุณจะถูกเก็บเฉพาะในเครื่องนี้</p>
-    <p id="googleOriginHint" class="help" style="display:none;margin-top:8px;color:#c96;">
-      ทดสอบบน localhost: ต้องเพิ่ม <code>http://localhost:3000</code> ใน Google Cloud Console → Credentials → Authorized JavaScript origins
-    </p>
+    <header class="landing-hero">
+      <img class="landing-logo" src="/images/icon.jpg" alt="TikTok Live Overlay">
+      <h1>TikTok Live Overlay</h1>
+      <p class="landing-tagline">
+        เครื่องมือสำหรับสตรีมเมอร์ TikTok Live — แสดงของขวัญ แชท ยอดไลค์ และอ่านแชทเสียงบน TikTok Live Studio, OBS
+        แบบเรียลไทม์ ไม่ต้องติดตั้งโปรแกรมเพิ่ม แค่คัดลอกลิงก์ไปใส่ Browser Source
+      </p>
+      <div class="landing-signin-card">
+        <p class="landing-signin-title">เริ่มต้นใช้งาน — เข้าสู่ระบบด้วย Google</p>
+        <div id="googleSignInContainer" class="google-signin-wrap"></div>
+        <p class="landing-privacy">ข้อมูลบัญชี TikTok ของคุณถูกเก็บเฉพาะในระบบนี้เพื่อเชื่อมต่อไลฟ์เท่านั้น</p>
+        <p id="googleOriginHint" class="help" style="display:none;margin-top:8px;color:#c96;">
+          ทดสอบบน localhost: ต้องเพิ่ม <code>http://localhost:3000</code> ใน Google Cloud Console → Credentials → Authorized JavaScript origins
+        </p>
+      </div>
+    </header>
+
+    <section class="landing-section">
+      <h2>ใช้งานง่าย 3 ขั้นตอน</h2>
+      <p class="landing-section-desc">ตั้งค่าครั้งเดียว ใช้ได้ทุกไลฟ์ — รองรับ OBS, TikTok Live Studio และโปรแกรมสตรีมอื่นๆ</p>
+      <div class="landing-steps">
+        <article class="landing-step">
+          <span class="landing-step-num">1</span>
+          <h3>Login ด้วย Google</h3>
+          <p>เข้าสู่ระบบเพื่อเปิด Dashboard ส่วนตัวของคุณ ปลอดภัยและรวดเร็ว</p>
+        </article>
+        <article class="landing-step">
+          <span class="landing-step-num">2</span>
+          <h3>กรอก TikTok Username</h3>
+          <p>ใส่ชื่อผู้ใช้ TikTok แล้วคัดลอกลิงก์ Overlay ที่ต้องการ — ไม่ต้องรอเชื่อมต่อก็ตั้งค่า TikTok Live Studio, OBS ล่วงหน้าได้</p>
+        </article>
+        <article class="landing-step">
+          <span class="landing-step-num">3</span>
+          <h3>วางใน TikTok Live Studio, OBS แล้วไลฟ์</h3>
+          <p>เพิ่ม Browser Source ตั้งพื้นหลัง Transparent ของขวัญและแชทจะอัปเดตอัตโนมัติเมื่อมีคนส่งของ</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="landing-section">
+      <h2>ฟีเจอร์หลัก</h2>
+      <p class="landing-section-desc">เลือก Overlay ได้ตามสไตล์ไลฟ์ของคุณ — ปรับแต่งโถ สี พื้น และเสียง TTS ได้จาก Dashboard</p>
+      <ul class="landing-feature-list">
+        <li>
+          <strong>🎁 Gift Jar ฟิสิกส์</strong>
+          <span>ของขวัญตกลงโถด้วยฟิสิกส์จริง เลือกโถได้หลายแบบ (แก้ว Mason, มังกรทอง, Ultra ฯลฯ)</span>
+        </li>
+        <li>
+          <strong>🌿 Gift Floor</strong>
+          <span>ของขวัญกองบนพื้น — เหมาะกับไลฟ์สไตล์เกมหรือฉากพื้นหญ้า/พื้นเค้ก</span>
+        </li>
+        <li>
+          <strong>🍱 Gift ปิ่นโต</strong>
+          <span>ของขวัญเรียงในปิ่นโตหลายชั้น สไตล์ไทยๆ โดดเด่นบนจอไลฟ์</span>
+        </li>
+        <li>
+          <strong>💬 Chat Overlay</strong>
+          <span>แสดงข้อความแชทผู้ชมแบบเรียลไทม์ ปรับพื้นหลังโปร่งใสหรือดำอ่อนได้</span>
+        </li>
+        <li>
+          <strong>🔊 Chat TTS</strong>
+          <span>อ่านแชทผู้ชมเป็นเสียง Neural ออนไลน์ เลือกเสียง ความเร็ว และรูปแบบการอ่านได้</span>
+        </li>
+        <li>
+          <strong>❤️ Like Hearts &amp; Ranking</strong>
+          <span>หัวใจลอยเมื่อมีคนกดไลค์ พร้อม Top Likers และ Top Gifters อัปเดตสด</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="landing-cta">
+      <h2>พร้อมเริ่มไลฟ์แล้วหรือยัง?</h2>
+      <p>Login ด้วย Google แล้วตั้งค่า Overlay ของคุณได้ในไม่กี่นาที</p>
+      <div id="googleSignInContainerBottom" class="google-signin-wrap"></div>
+    </section>
   </div>
 
   <div class="container" id="dashboardPage" style="display: none;">
     <div class="dashboard-announce">
-      📢 ระบบมีการอัพเดท Overlay บางตัวเช่น Gift Jar อาจจะต้องทำการ Setup ใหม่ ขออภัยในความไม่สะดวก
+      📢 ระบบมีการอัพเดทใหม่แก้ไขล่าสุด วันที่ 08/07/2569 ขออภัยในความไม่สะดวก
     </div>
     <h1>🎥 Dashboard</h1>
     
@@ -414,7 +761,7 @@
       <label>TikTok Username</label>
       <input type="text" id="tiktokUsername" placeholder="เช่น art_of_yut">
 
-      <details style="margin-top: 12px;">
+      <!-- <details style="margin-top: 12px;">
         <summary style="cursor:pointer;color:#666;font-size:14px;">ตั้งค่าขั้นสูง (ถ้า TikTok บล็อกการเชื่อมต่อ)</summary>
         <div style="margin-top:10px;">
           <label>sessionid (cookie จาก TikTok)</label>
@@ -423,14 +770,16 @@
           <input type="text" id="tiktokTargetIdc" placeholder="เช่น useast1a, alisg" autocomplete="off">
           <p class="help" style="margin-top:8px;">Login TikTok ในเบราว์เซอร์ → F12 → Application → Cookies → tiktok.com → คัดลอกทั้งสองค่า (เก็บเป็นความลับ)</p>
         </div>
-      </details>
+      </details> -->
 
       <p class="help" style="margin-top:12px;">
         ทดสอบ Physics โดยไม่ต้องเชื่อม TikTok:
         <a href="/gift-jar-physics.html?jar=jar4&amp;preview=1" target="_blank" rel="noopener">เปิด jar4 Preview</a>
         ·
         <a href="/gift-floor-physics.html?floor=floor1&amp;preview=1" target="_blank" rel="noopener">เปิด Gift Floor Preview</a>
-        (กด G/H/J เพิ่มของขวัญ, R รีเซ็ต)
+        ·
+        <a href="/gift-tts.html?preview=1&amp;voice=female1&amp;vol=100&amp;speed=100&amp;format=full" target="_blank" rel="noopener">เปิด Chat TTS Preview</a>
+        (Physics: G/H/J เพิ่มของขวัญ, R รีเซ็ต · TTS: C=แชททดสอบ)
       </p>
       
       <div style="margin-top: 10px;">
@@ -443,23 +792,31 @@
     <!-- Overlays -->
     <div class="card">
       <h2>📺 Overlay URLs</h2>
-      <button class="btn btn-primary" id="generateOverlaysBtn" type="button" style="margin-bottom:8px;" disabled>แสดง Overlay Links</button>
-      <div id="overlay-box" style="display:none;">
-        <div id="urls" class="overlay-grid"></div>
+      <div class="overlay-tabs" role="tablist">
+        <button class="overlay-tab active" type="button" role="tab" data-tab="overlay" aria-selected="true">🎁 Widgets</button>
+        <button class="overlay-tab" type="button" role="tab" data-tab="tts" aria-selected="false">🔊 TTS (เสียง)</button>
       </div>
-      <div class="help" id="overlayHint" style="margin-top:8px;">เชื่อมต่อ TikTok ก่อนเพื่อแสดง Overlay Links</div>
+      <div id="overlay-box">
+        <div id="urls-overlay" class="overlay-grid overlay-tab-panel active" role="tabpanel"></div>
+        <div id="urls-tts" class="overlay-grid overlay-tab-panel" role="tabpanel"></div>
+      </div>
+      <div class="help" id="overlayHint" style="margin-top:8px;">กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ — ไม่ต้องเชื่อมต่อก็ใช้งานได้</div>
     </div>
 
     <button class="btn btn-secondary" id="logoutBtn" type="button" style="margin-top:10px;">ออกจากระบบ</button>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/tts-text-utils.js?v=1.0.12"></script>
+  <script src="/js/tts-config.js?v=1.0.12"></script>
+  <script src="/js/tts-overlay.js?v=1.0.12"></script>
   <script>
     let socket = null;
     let socketReadyPromise = null;
     let currentUser = null;
     let isConnected = false;
     let connectedUsername = '';
+    let overlayUiRenderTimer = null;
     let selectedGiftJar = 1;
     let selectedPhysicsJar = 'jar1';
     let selectedPhysicsShowCoins = 'show';
@@ -477,6 +834,10 @@
     let selectedTopLikersLikesColor = 'white';
     let selectedTopLikersLikesSize = 'md';
     let selectedTopGiftersBg = 'transparent';
+    let selectedTtsVoice = 'female1';
+    let selectedTtsVolume = 100;
+    let selectedTtsSpeed = 100;
+    let selectedTtsFormat = 'full';
     let jarDemoTimer = null;
     let heartsDemoTimer = null;
     const heartsDemoTimeouts = [];
@@ -556,6 +917,10 @@
       const savedFloor = localStorage.getItem('tgj_selected_floor');
       const savedFloorCoins = localStorage.getItem('tgj_floor_show_coins');
       const savedFloorGiftSize = localStorage.getItem('tgj_floor_gift_size');
+      const savedTtsVoice = localStorage.getItem('tgj_tts_voice');
+      const savedTtsVolume = parseTtsVolume(localStorage.getItem('tgj_tts_volume'), 100);
+      const savedTtsSpeed = parseTtsSpeed(localStorage.getItem('tgj_tts_speed'), 100);
+      const savedTtsFormat = localStorage.getItem('tgj_tts_format');
       if (savedPhysics && PHYSICS_JAR_OPTIONS.some((jar) => jar.id === savedPhysics)) {
         selectedPhysicsJar = savedPhysics;
       }
@@ -582,6 +947,14 @@
       }
       if (GIFT_SIZE_OPTIONS.some((opt) => opt.id === savedFloorGiftSize)) {
         selectedFloorGiftSize = savedFloorGiftSize;
+      }
+      if (TTS_VOICE_PRESETS.some((opt) => opt.id === savedTtsVoice)) {
+        selectedTtsVoice = savedTtsVoice;
+      }
+      selectedTtsVolume = savedTtsVolume;
+      selectedTtsSpeed = savedTtsSpeed;
+      if (TTS_FORMAT_OPTIONS.some((opt) => opt.id === savedTtsFormat)) {
+        selectedTtsFormat = normalizeTtsFormat(savedTtsFormat, 'full');
       }
     }
 
@@ -904,19 +1277,22 @@
         use_fedcm_for_prompt: true,
       });
 
-      const container = document.getElementById('googleSignInContainer');
-      if (container && !container.dataset.rendered) {
-        google.accounts.id.renderButton(container, {
-          type: 'standard',
-          theme: 'outline',
-          size: 'large',
-          text: 'signin_with',
-          locale: 'th',
-          shape: 'rectangular',
-          width: 280,
-        });
-        container.dataset.rendered = '1';
-      }
+      const buttonOpts = {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        locale: 'th',
+        shape: 'rectangular',
+        width: 280,
+      };
+      ['googleSignInContainer', 'googleSignInContainerBottom'].forEach((id) => {
+        const container = document.getElementById(id);
+        if (container && !container.dataset.rendered) {
+          google.accounts.id.renderButton(container, buttonOpts);
+          container.dataset.rendered = '1';
+        }
+      });
 
       return true;
     }
@@ -1008,6 +1384,7 @@
 
       loadSavedJarPreference();
       loadSavedBgPreferences();
+      updateOverlayUI();
 
       connectDashboardSocket();
       prepareDashboardConnection().catch(() => {});
@@ -1249,6 +1626,7 @@
 
       if (data.success) {
         showMessage('บันทึกข้อมูลเรียบร้อย (ยังไม่ได้เชื่อมต่อ)', false);
+        updateOverlayUI();
       } else {
         showMessage(data.error || 'บันทึกไม่สำเร็จ', true);
       }
@@ -1294,23 +1672,61 @@
     }
 
     // ================== Overlays ==================
-    function updateOverlayUI() {
-      const btn = document.getElementById('generateOverlaysBtn');
-      const overlayBox = document.getElementById('overlay-box');
-      const hint = document.getElementById('overlayHint');
-      const ready = !!connectedUsername;
+    function getOverlayUsername() {
+      const fromInput = document.getElementById('tiktokUsername')?.value?.trim() || '';
+      return fromInput || connectedUsername || '';
+    }
 
-      btn.disabled = !ready;
-      if (!ready) {
-        overlayBox.style.display = 'none';
-        document.getElementById('urls').replaceChildren();
-        hint.textContent = 'กดเชื่อมต่อ TikTok ก่อนเพื่อแสดง Overlay Links (รอไลฟ์ก็ได้)';
+    function createOverlayEmptyState(message) {
+      const item = document.createElement('div');
+      item.className = 'overlay-empty-state';
+      item.textContent = message;
+      return item;
+    }
+
+    function bindOverlayTabs() {
+      const tabs = document.querySelectorAll('.overlay-tab');
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const target = tab.dataset.tab;
+          tabs.forEach((btn) => {
+            const active = btn === tab;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          document.querySelectorAll('.overlay-tab-panel').forEach((panel) => {
+            panel.classList.toggle('active', panel.id === `urls-${target}`);
+          });
+        });
+      });
+    }
+
+    function updateOverlayHint() {
+      const hint = document.getElementById('overlayHint');
+      if (!hint) return;
+      const username = getOverlayUsername();
+
+      if (!username) {
+        hint.textContent = 'กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ — ไม่ต้องเชื่อมต่อก็ใช้งานได้';
+      } else if (isConnected) {
+        hint.textContent = `ลิงก์สำหรับ @${username} — คัดลอกไปใส่ Browser Source ใน OBS (Background: Transparent)`;
       } else {
-        hint.textContent = 'คัดลอกลิงก์ไปใส่ใน Browser Source ของ OBS (Background: Transparent)';
+        hint.textContent = `ลิงก์สำหรับ @${username} — ยังไม่เชื่อมต่อไลฟ์ แต่ตั้งค่า OBS ล่วงหน้าได้เลย`;
       }
     }
 
-    const OVERLAY_ASSET_VERSION = '1.0.11';
+    function updateOverlayUI({ debounce = false } = {}) {
+      updateOverlayHint();
+      if (debounce) {
+        clearTimeout(overlayUiRenderTimer);
+        overlayUiRenderTimer = setTimeout(renderOverlayPanels, 350);
+        return;
+      }
+      clearTimeout(overlayUiRenderTimer);
+      renderOverlayPanels();
+    }
+
+    const OVERLAY_ASSET_VERSION = '1.0.12';
 
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);
@@ -1327,7 +1743,7 @@
     }
 
     function getGiftJarUrl(jarId = selectedGiftJar) {
-      return buildOverlayUrl('/gift-jar.html', connectedUsername, { jar: jarId });
+      return buildOverlayUrl('/gift-jar.html', getOverlayUsername(), { jar: jarId });
     }
 
     function getGiftJarPhysicsUrl(
@@ -1335,7 +1751,7 @@
       coins = selectedPhysicsShowCoins,
       giftSize = selectedPhysicsGiftSize
     ) {
-      return buildOverlayUrl('/gift-jar-physics.html', connectedUsername, {
+      return buildOverlayUrl('/gift-jar-physics.html', getOverlayUsername(), {
         jar: jarId,
         coins,
         giftsize: giftSizeUrlParam(giftSize),
@@ -1567,7 +1983,7 @@
       coins = selectedFloorShowCoins,
       giftSize = selectedFloorGiftSize
     ) {
-      return buildOverlayUrl('/gift-floor-physics.html', connectedUsername, {
+      return buildOverlayUrl('/gift-floor-physics.html', getOverlayUsername(), {
         floor: floorId,
         coins,
         giftsize: giftSizeUrlParam(giftSize),
@@ -1638,7 +2054,7 @@
       const info = document.createElement('div');
       info.className = 'overlay-item-info';
       info.innerHTML = `
-        <strong>🪵 Gift Floor (พื้นกองของขวัญ)</strong><br>
+        <strong>🎁 Gift Floor (พื้นกองของขวัญ)</strong><br>
         <span id="giftFloorPhysicsLinkText">${getGiftFloorPhysicsUrl()}</span>
       `;
 
@@ -1770,7 +2186,7 @@
       coins = selectedPintoShowCoins,
       giftSize = selectedPintoGiftSize
     ) {
-      return buildOverlayUrl('/gift-pinto-physics.html', connectedUsername, {
+      return buildOverlayUrl('/gift-pinto-physics.html', getOverlayUsername(), {
         pinto: pintoId,
         coins,
         giftsize: giftSizeUrlParam(giftSize),
@@ -1984,7 +2400,7 @@
       const info = document.createElement('div');
       info.className = 'overlay-item-info';
       info.innerHTML = `
-        <strong>🫙 Gift Jar (ฟิสิกส์)</strong><br>
+        <strong>🎁 Gift Jar (ฟิสิกส์)</strong><br>
 
         <span id="giftJarPhysicsLinkText">${getGiftJarPhysicsUrl()}</span>
       `;
@@ -2115,7 +2531,7 @@
     }
 
     function createLikeHeartsOverlayItem() {
-      const getUrl = () => buildOverlayUrl('/like-hearts.html', connectedUsername);
+      const getUrl = () => buildOverlayUrl('/like-hearts.html', getOverlayUsername());
 
       const item = document.createElement('div');
       item.className = 'overlay-item';
@@ -2180,7 +2596,7 @@
         previewType,
       } = config;
 
-      const getUrl = (bg = getBg()) => buildOverlayUrl(path, connectedUsername, { bg });
+      const getUrl = (bg = getBg()) => buildOverlayUrl(path, getOverlayUsername(), { bg });
 
       const item = document.createElement('div');
       item.className = 'overlay-item';
@@ -2251,6 +2667,227 @@
       return item;
     }
 
+    function getChatTtsUrl(
+      voice = selectedTtsVoice,
+      volume = selectedTtsVolume,
+      speed = selectedTtsSpeed,
+      format = selectedTtsFormat
+    ) {
+      return buildOverlayUrl('/gift-tts.html', getOverlayUsername(), {
+        voice,
+        vol: parseTtsVolume(volume),
+        speed: parseTtsSpeed(speed),
+        format,
+      });
+    }
+
+    function updateGiftTtsOverlay() {
+      const link = document.getElementById('giftTtsLinkText');
+      if (link) link.textContent = getChatTtsUrl();
+      const volLabel = document.getElementById('ttsVolumeValue');
+      if (volLabel) volLabel.textContent = `${parseTtsVolume(selectedTtsVolume)}%`;
+      const speedLabel = document.getElementById('ttsSpeedValue');
+      if (speedLabel) speedLabel.textContent = `${parseTtsSpeed(selectedTtsSpeed)}%`;
+      const formatLabel = document.getElementById('ttsFormatValue');
+      if (formatLabel) {
+        formatLabel.textContent = selectedTtsFormat === 'text' ? 'เฉพาะข้อความ' : 'ชื่อ+ข้อความ';
+      }
+    }
+
+    function createGiftTtsOverlayItem() {
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+
+      const top = document.createElement('div');
+      top.className = 'overlay-item-top';
+
+      const info = document.createElement('div');
+      info.className = 'overlay-item-info';
+      info.innerHTML = `
+        <strong>💬 Chat TTS (อ่านแชทเสียง)</strong><br>
+        <span id="giftTtsLinkText">${getChatTtsUrl()}</span>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'overlay-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'small-btn';
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => copyToClipboard(getChatTtsUrl(), copyBtn));
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'small-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => window.open(getChatTtsUrl(), '_blank'));
+
+      const previewBtn = document.createElement('button');
+      previewBtn.className = 'small-btn';
+      previewBtn.type = 'button';
+      previewBtn.textContent = 'Preview';
+      previewBtn.addEventListener('click', () => {
+        const url = new URL('/gift-tts.html', window.location.origin);
+        url.searchParams.set('preview', '1');
+        url.searchParams.set('voice', selectedTtsVoice);
+        url.searchParams.set('vol', String(parseTtsVolume(selectedTtsVolume)));
+        url.searchParams.set('speed', String(parseTtsSpeed(selectedTtsSpeed)));
+        url.searchParams.set('format', selectedTtsFormat);
+        window.open(url.toString(), '_blank');
+      });
+
+      actions.append(copyBtn, openBtn, previewBtn);
+      top.append(info, actions);
+      item.appendChild(top);
+
+      const pickerRow = document.createElement('div');
+      pickerRow.className = 'jar-picker-row';
+
+      const voiceLabel = document.createElement('label');
+      voiceLabel.textContent = 'เสียงพูด';
+      const voiceSelect = document.createElement('select');
+      voiceSelect.className = 'jar-select';
+      TTS_VOICE_PRESETS.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = `${preset.label} — ${preset.hint}`;
+        if (preset.id === selectedTtsVoice) option.selected = true;
+        voiceSelect.appendChild(option);
+      });
+      voiceSelect.addEventListener('change', () => {
+        selectedTtsVoice = voiceSelect.value;
+        localStorage.setItem('tgj_tts_voice', selectedTtsVoice);
+        updateGiftTtsOverlay();
+      });
+
+      const formatLabel = document.createElement('label');
+      formatLabel.textContent = 'รูปแบบการอ่าน';
+      const formatSelect = document.createElement('select');
+      formatSelect.className = 'jar-select';
+      TTS_FORMAT_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedTtsFormat) option.selected = true;
+        formatSelect.appendChild(option);
+      });
+      formatSelect.addEventListener('change', () => {
+        selectedTtsFormat = normalizeTtsFormat(formatSelect.value, 'full');
+        formatSelect.value = selectedTtsFormat;
+        localStorage.setItem('tgj_tts_format', selectedTtsFormat);
+        updateGiftTtsOverlay();
+      });
+
+      const formatValue = document.createElement('span');
+      formatValue.id = 'ttsFormatValue';
+      formatValue.className = 'tts-range-value';
+      formatValue.style.minWidth = '96px';
+      formatValue.textContent = selectedTtsFormat === 'text' ? 'เฉพาะข้อความ' : 'ชื่อ+ข้อความ';
+
+      const volumeLabel = document.createElement('label');
+      volumeLabel.textContent = 'ความดังเสียง';
+      const volumeWrap = document.createElement('div');
+      volumeWrap.className = 'tts-range-wrap';
+      const volumeRange = document.createElement('input');
+      volumeRange.type = 'range';
+      volumeRange.className = 'tts-range';
+      volumeRange.min = '0';
+      volumeRange.max = '100';
+      volumeRange.step = '5';
+      volumeRange.value = String(parseTtsVolume(selectedTtsVolume));
+      const volumeValue = document.createElement('span');
+      volumeValue.id = 'ttsVolumeValue';
+      volumeValue.className = 'tts-range-value';
+      volumeValue.textContent = `${parseTtsVolume(selectedTtsVolume)}%`;
+      bindRangeInput(volumeRange, () => {
+        selectedTtsVolume = parseTtsVolume(volumeRange.value);
+        volumeValue.textContent = `${selectedTtsVolume}%`;
+        localStorage.setItem('tgj_tts_volume', String(selectedTtsVolume));
+        updateGiftTtsOverlay();
+      });
+      volumeWrap.append(volumeRange, volumeValue);
+
+      const speedLabel = document.createElement('label');
+      speedLabel.textContent = 'ความเร็วการพูด';
+      const speedWrap = document.createElement('div');
+      speedWrap.className = 'tts-range-wrap';
+      const speedRange = document.createElement('input');
+      speedRange.type = 'range';
+      speedRange.className = 'tts-range';
+      speedRange.min = '50';
+      speedRange.max = '150';
+      speedRange.step = '5';
+      speedRange.value = String(parseTtsSpeed(selectedTtsSpeed));
+      const speedValue = document.createElement('span');
+      speedValue.id = 'ttsSpeedValue';
+      speedValue.className = 'tts-range-value';
+      speedValue.textContent = `${parseTtsSpeed(selectedTtsSpeed)}%`;
+      bindRangeInput(speedRange, () => {
+        selectedTtsSpeed = parseTtsSpeed(speedRange.value);
+        speedValue.textContent = `${selectedTtsSpeed}%`;
+        localStorage.setItem('tgj_tts_speed', String(selectedTtsSpeed));
+        updateGiftTtsOverlay();
+      });
+      speedWrap.append(speedRange, speedValue);
+
+      const previewVoiceBtn = document.createElement('button');
+      previewVoiceBtn.className = 'btn btn-secondary';
+      previewVoiceBtn.type = 'button';
+      previewVoiceBtn.textContent = '🔊 ทดลองฟังเสียง';
+      previewVoiceBtn.style.marginTop = '4px';
+      previewVoiceBtn.addEventListener('click', async () => {
+        previewVoiceBtn.disabled = true;
+        const originalText = previewVoiceBtn.textContent;
+        previewVoiceBtn.textContent = 'กำลังเล่น...';
+        try {
+          const previewFormat = normalizeTtsFormat(formatSelect.value, selectedTtsFormat);
+          const previewLine = buildTtsPreviewText(previewFormat);
+          const result = await previewTtsVoice(
+            selectedTtsVoice,
+            selectedTtsVolume,
+            selectedTtsSpeed,
+            previewFormat,
+            previewLine
+          );
+          showMessage(
+            result?.voiceName
+              ? `ทดลองฟัง (${previewFormat === 'text' ? 'เฉพาะข้อความ' : 'ชื่อ+ข้อความ'}): ${previewLine}`
+              : `กำลังเล่น: ${previewLine}`,
+            false
+          );
+        } catch (err) {
+          const msg = err?.message === 'tts_api_missing'
+            ? 'เซิร์ฟเวอร์ยังไม่มี TTS API — รีสตาร์ทเซิร์ฟเวอร์แล้วลองใหม่'
+            : 'เล่นเสียงไม่สำเร็จ — ลองกดอีกครั้งหรือเปลี่ยนเสียง';
+          showMessage(msg, true);
+        } finally {
+          previewVoiceBtn.disabled = false;
+          previewVoiceBtn.textContent = originalText;
+        }
+      });
+
+      const hint = document.createElement('p');
+      hint.className = 'preview-caption';
+      hint.textContent = 'ใช้เสียง Neural ออนไลน์ (ไม่ต้องติดตั้ง voice ในเครื่อง) · ความเร็ว 50%=ช้า 100%=ปกติ 150%=เร็ว · อ่านเฉพาะแชทผู้ชม';
+
+      pickerRow.append(
+        voiceLabel,
+        voiceSelect,
+        formatLabel,
+        formatSelect,
+        formatValue,
+        volumeLabel,
+        volumeWrap,
+        speedLabel,
+        speedWrap,
+        previewVoiceBtn,
+        hint
+      );
+      item.appendChild(pickerRow);
+      return item;
+    }
+
     function createChatOverlayItem() {
       return createOverlayItemWithBgPicker({
         name: '💬 Chat Overlay',
@@ -2270,7 +2907,7 @@
       nameSize = selectedTopLikersNameSize,
       likesSize = selectedTopLikersLikesSize
     ) {
-      return buildOverlayUrl('/top-likers.html', connectedUsername, {
+      return buildOverlayUrl('/top-likers.html', getOverlayUsername(), {
         bg, nameColor, likesColor, nameSize, likesSize
       });
     }
@@ -2411,7 +3048,7 @@
     }
 
     function createOverlayItem(overlay) {
-      const full = buildOverlayUrl(overlay.path, connectedUsername);
+      const full = buildOverlayUrl(overlay.path, getOverlayUsername());
       const item = document.createElement('div');
       item.className = 'overlay-item';
       item.innerHTML = `
@@ -2431,27 +3068,33 @@
       return item;
     }
 
-    function generateOverlays() {
-      if (!isConnected || !connectedUsername) {
-        return showMessage('กรุณากดเชื่อมต่อ TikTok ก่อน', true);
-      }
-
-      const container = document.getElementById('overlay-box');
-      const urlsDiv = document.getElementById('urls');
-      container.style.display = 'block';
+    function renderOverlayPanels() {
+      const overlayDiv = document.getElementById('urls-overlay');
+      const ttsDiv = document.getElementById('urls-tts');
+      if (!overlayDiv || !ttsDiv) return;
 
       stopJarDemoAnimation();
       stopHeartsDemoAnimation();
 
-      urlsDiv.replaceChildren();
-      urlsDiv.appendChild(createGiftJarPhysicsOverlayItem());
-      urlsDiv.appendChild(createGiftFloorPhysicsOverlayItem());
-      urlsDiv.appendChild(createGiftPintoPhysicsOverlayItem());
-      urlsDiv.appendChild(createGiftJarOverlayItem());
-      urlsDiv.appendChild(createChatOverlayItem());
-      urlsDiv.appendChild(createTopLikersOverlayItem());
-      urlsDiv.appendChild(createTopGiftersOverlayItem());
-      urlsDiv.appendChild(createLikeHeartsOverlayItem());
+      overlayDiv.replaceChildren();
+      ttsDiv.replaceChildren();
+
+      const username = getOverlayUsername();
+      if (!username) {
+        overlayDiv.appendChild(createOverlayEmptyState('กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ Overlay'));
+        ttsDiv.appendChild(createOverlayEmptyState('กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ TTS'));
+        return;
+      }
+
+      overlayDiv.appendChild(createGiftJarPhysicsOverlayItem());
+      overlayDiv.appendChild(createGiftFloorPhysicsOverlayItem());
+      overlayDiv.appendChild(createGiftPintoPhysicsOverlayItem());
+      overlayDiv.appendChild(createChatOverlayItem());
+      overlayDiv.appendChild(createTopLikersOverlayItem());
+      overlayDiv.appendChild(createTopGiftersOverlayItem());
+      overlayDiv.appendChild(createLikeHeartsOverlayItem());
+
+      ttsDiv.appendChild(createGiftTtsOverlayItem());
     }
 
     function copyToClipboard(text, btn) {
@@ -2497,8 +3140,13 @@
       document.getElementById('connectBtn').addEventListener('click', connectTikTok);
       document.getElementById('saveOnlyBtn').addEventListener('click', saveOnly);
       document.getElementById('disconnectBtn').addEventListener('click', disconnectTikTok);
-      document.getElementById('generateOverlaysBtn').addEventListener('click', generateOverlays);
       document.getElementById('logoutBtn').addEventListener('click', logout);
+      bindOverlayTabs();
+      const tiktokInput = document.getElementById('tiktokUsername');
+      if (tiktokInput) {
+        tiktokInput.addEventListener('input', () => updateOverlayUI({ debounce: true }));
+        tiktokInput.addEventListener('change', () => updateOverlayUI());
+      }
     }
 
     window.addEventListener('DOMContentLoaded', async () => {

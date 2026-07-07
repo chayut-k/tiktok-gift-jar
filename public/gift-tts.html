@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
+  <title>Chat TTS</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: transparent;
+      overflow: hidden;
+      font-family: 'Segoe UI', Arial, sans-serif;
+    }
+    body.preview-mode {
+      background: #12141c;
+      overflow: auto;
+      min-height: 100vh;
+    }
+    body.overlay-mode .panel { display: none; }
+    .panel {
+      width: min(460px, calc(100vw - 24px));
+      margin: 16px auto;
+      padding: 16px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.82);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .panel h1 { margin: 0 0 8px; font-size: 20px; }
+    .meta {
+      color: #b8c0d4;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .status {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 14px;
+      min-height: 44px;
+      margin-bottom: 10px;
+    }
+    .status.speaking {
+      border: 1px solid rgba(255, 215, 0, 0.45);
+      color: #ffe08a;
+    }
+    .queue { color: #9aa3b8; font-size: 12px; margin-bottom: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      background: #2f6fed;
+      color: #fff;
+    }
+    button.secondary { background: #3a4154; }
+    button.warn { background: #9a3412; }
+    .hint { color: #8b93a7; font-size: 12px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="panel" id="panel">
+    <h1>💬 Chat TTS</h1>
+    <div class="meta" id="meta"></div>
+    <div class="status" id="status">รอข้อความแชท...</div>
+    <div class="queue" id="queue">คิว: 0</div>
+    <div class="actions">
+      <button type="button" class="secondary" id="testChatBtn">ทดสอบแชท</button>
+      <button type="button" class="warn" id="clearBtn">ล้างคิว</button>
+    </div>
+    <p class="hint">
+      อ่านแชทผู้ชมผ่านเสียง Neural ออนไลน์ (ไม่ต้องติดตั้ง voice ในเครื่อง)<br>
+      Preview: กด C = แชททดสอบ
+    </p>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js"></script>
+  <script src="/js/tts-text-utils.js?v=1.0.12"></script>
+  <script src="/js/tts-config.js?v=1.0.12"></script>
+  <script src="/js/tts-overlay.js?v=1.0.12"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const isPreview = params.get('preview') === '1';
+    const isOverlay = !!params.get('user');
+    const config = getTtsOverlayConfig();
+
+    if (isPreview) document.body.classList.add('preview-mode');
+    else if (isOverlay) document.body.classList.add('overlay-mode');
+
+    const statusEl = document.getElementById('status');
+    const queueEl = document.getElementById('queue');
+    const metaEl = document.getElementById('meta');
+
+    function setStatus(text, speaking = false) {
+      statusEl.textContent = text;
+      statusEl.classList.toggle('speaking', speaking);
+    }
+
+    function setQueueCount(count) {
+      queueEl.textContent = `คิว: ${count}`;
+    }
+
+    function updateMeta() {
+      const preset = TTS_VOICE_PRESETS.find((item) => item.id === config.voice);
+      const activeFormat = getTtsFormatFromUrl();
+      const formatLabel = activeFormat === 'text' ? 'เฉพาะข้อความ' : 'ชื่อ+ข้อความ';
+      metaEl.textContent = [
+        `เสียง: ${preset?.label || config.voice}`,
+        `รูปแบบ: ${formatLabel}`,
+        `ความเร็ว: ${config.speed}%`,
+        `ความดัง: ${config.volume}%`,
+      ].join(' | ');
+    }
+
+    updateMeta();
+
+    const speaker = new TtsSpeaker(config, {
+      onQueued(line, queueLen) {
+        setQueueCount(queueLen + (speaker.running ? 1 : 0));
+      },
+      onSpeakStart(line, queueLen) {
+        setStatus(`🔊 ${line}`, true);
+        setQueueCount(queueLen);
+      },
+      onSpeakEnd() {
+        setQueueCount(speaker.queue.length);
+        if (!speaker.queue.length) {
+          queueMicrotask(() => {
+            if (!speaker.queue.length && !speaker.running) {
+              setStatus('รอข้อความแชท...', false);
+            }
+          });
+        }
+      },
+      onSpeakError(line) {
+        setStatus(`⚠️ อ่านไม่สำเร็จ: ${line}`, false);
+      },
+      onCleared() {
+        setStatus('ล้างคิวแล้ว', false);
+        setQueueCount(0);
+      },
+    });
+
+    function testChatMessage() {
+      speaker.handleChat({
+        nickname: 'ผู้ชมทดสอบ',
+        comment: 'สวัสดีครับ สนุกมากเลย',
+      });
+    }
+
+    document.getElementById('testChatBtn').addEventListener('click', testChatMessage);
+    document.getElementById('clearBtn').addEventListener('click', () => speaker.clear());
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'c') testChatMessage();
+    });
+
+    if (!isPreview) {
+      const socket = createOverlaySocket();
+      speaker.unlock();
+
+      socket.on('connect', () => {
+        setStatus('เชื่อมต่อแล้ว — รอข้อความแชท', false);
+      });
+
+      socket.on('chat', (data) => {
+        speaker.handleChat(data);
+      });
+
+      socket.on('status', (data) => {
+        if (data.connected) {
+          setStatus('เชื่อมต่อไลฟ์แล้ว — รอข้อความแชท', false);
+        }
+      });
+    } else if (!speaker.isSupported()) {
+      setStatus('เบราว์เซอร์นี้ไม่รองรับการเล่นเสียง', false);
+    } else {
+      setStatus('โหมด Preview — กดทดสอบแชทหรือ C', false);
+    }
+  </script>
+</body>
+</html>

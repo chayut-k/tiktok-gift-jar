@@ -1,6 +1,6 @@
 {
   "name": "tiktok-gift-jar",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
@@ -19,6 +19,7 @@
     "axios": "^1.18.0",
     "compression": "^1.8.1",
     "dotenv": "^17.4.2",
+    "edge-tts-universal": "^1.4.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",

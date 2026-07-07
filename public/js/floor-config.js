@@ -12,7 +12,7 @@ const FLOOR_CONFIGS = {
       innerLeft: 8,
       innerRight: 452,
       surfaceOffsetRatio: 0.27,
-      floorY: 544,
+      floorY: 547,
       spawn: {
         centerX: 230,
         y: 64,
@@ -33,7 +33,7 @@ const FLOOR_CONFIGS = {
       innerLeft: 8,
       innerRight: 452,
       surfaceOffsetRatio: 0.27,
-      floorY: 545,
+      floorY: 548,
       spawn: {
         centerX: 230,
         y: 64,

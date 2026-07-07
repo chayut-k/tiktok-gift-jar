@@ -24,6 +24,13 @@ const {
   normalizeGiftEvent,
   normalizeLikeEvent,
 } = require('./tiktok-event-normalize');
+const {
+  TTS_VOICE_PRESETS,
+  TTS_PREVIEW_SAMPLE,
+  synthesizeSpeech,
+  sanitizeTtsText,
+  parseTtsSpeed,
+} = require('./tts-service');
 
 // ================== Config ==================
 const isProd = process.env.NODE_ENV === 'production';
@@ -137,6 +144,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com', 'https://apis.google.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://accounts.google.com'],
       imgSrc: ["'self'", 'data:', 'https:', 'blob:'],
+      mediaSrc: ["'self'", 'blob:'],
       connectSrc: [
         "'self'",
         'https://accounts.google.com',
@@ -211,6 +219,14 @@ const connectWindowLimiter = rateLimit({
   ...connectLimitBase,
   windowMs: 15 * 60 * 1000,
   max: isProd ? 15 : 30,
+});
+
+const ttsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: isProd ? 45 : 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: jsonError('ขอเสียง TTS บ่อยเกินไป กรุณารอสักครู่'),
 });
 
 app.use('/api/', generalLimiter);
@@ -1143,6 +1159,39 @@ app.get('/health', (req, res) => {
 
 app.get('/api/config', (req, res) => {
   res.json({ googleClientId: GOOGLE_CLIENT_ID });
+});
+
+app.get('/api/tts/voices', (req, res) => {
+  res.json({
+    voices: TTS_VOICE_PRESETS.map(({ id, label, hint }) => ({ id, label, hint })),
+    previewSample: TTS_PREVIEW_SAMPLE,
+  });
+});
+
+app.post('/api/tts/speak', ttsLimiter, async (req, res) => {
+  try {
+    const text = sanitizeTtsText(req.body?.text);
+    const voiceId = String(req.body?.voice || 'female1');
+    const speedPercent = parseTtsSpeed(req.body?.speed, 100);
+
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'ไม่มีข้อความ' });
+    }
+
+    const { audio, voiceName } = await synthesizeSpeech({
+      text,
+      voiceId,
+      speedPercent,
+    });
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('X-TTS-Voice', encodeURIComponent(voiceName));
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(audio);
+  } catch (err) {
+    console.error('TTS speak error:', err.message || err);
+    res.status(500).json({ success: false, error: 'สังเคราะห์เสียงไม่สำเร็จ' });
+  }
 });
 
 async function buildGoogleUserResponse(payload) {
