@@ -16,7 +16,7 @@
     }
     .container { max-width: 560px; margin: 0 auto; }
     #loginPage.container {
-      max-width: 680px;
+      max-width: 1100px;
       padding: 0 20px 48px;
       text-align: left;
       box-sizing: border-box;
@@ -152,6 +152,29 @@
       font-size: 13px;
       color: #999;
       line-height: 1.55;
+    }
+
+    .landing-showcase-grid {
+      margin-top: 0;
+    }
+    .landing-showcase-item {
+      text-align: center;
+    }
+    .landing-showcase-item > strong {
+      display: block;
+      margin-bottom: 10px;
+      color: #f0f0f0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .landing-showcase-grid .bg-preview-inline {
+      min-height: 120px;
+    }
+    .landing-showcase-grid .physics-preview-wrap {
+      height: 200px;
+    }
+    .landing-showcase-grid .physics-preview-scaler {
+      transform: scale(0.34);
     }
 
     .landing-feature-list {
@@ -650,6 +673,9 @@
       .landing-hero { padding: 22px 16px; margin-top: 12px; }
       .landing-steps { grid-template-columns: 1fr; }
       .landing-signin-card { max-width: 100%; }
+      .landing-showcase-grid { grid-template-columns: 1fr; }
+      .landing-showcase-grid .physics-preview-wrap { height: 300px; }
+      .landing-showcase-grid .physics-preview-scaler { transform: scale(0.48); }
       .overlay-grid { grid-template-columns: 1fr; }
       .overlay-grid .physics-preview-wrap { height: 300px; }
       .overlay-grid .physics-preview-scaler { transform: scale(0.48); }
@@ -669,7 +695,7 @@
       <div class="landing-signin-card">
         <p class="landing-signin-title">เริ่มต้นใช้งาน — เข้าสู่ระบบด้วย Google</p>
         <div id="googleSignInContainer" class="google-signin-wrap"></div>
-        <p class="landing-privacy">ข้อมูลบัญชี TikTok ของคุณถูกเก็บเฉพาะในระบบนี้เพื่อเชื่อมต่อไลฟ์เท่านั้น</p>
+        <p class="landing-privacy">ข้อมูลบัญชี TikTok ของคุณใช้เพื่อเชื่อมต่อไลฟ์กับระบบ Overlay เท่านั้นไม่ได้จัดเก็บข้อมูลใดๆ</p>
         <p id="googleOriginHint" class="help" style="display:none;margin-top:8px;color:#c96;">
           ทดสอบบน localhost: ต้องเพิ่ม <code>http://localhost:3000</code> ใน Google Cloud Console → Credentials → Authorized JavaScript origins
         </p>
@@ -694,6 +720,32 @@
           <span class="landing-step-num">3</span>
           <h3>วางใน TikTok Live Studio, OBS แล้วไลฟ์</h3>
           <p>เพิ่ม Browser Source ตั้งพื้นหลัง Transparent ของขวัญและแชทจะอัปเดตอัตโนมัติเมื่อมีคนส่งของ</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="landing-section landing-showcase">
+      <h2>ตัวอย่าง Overlay</h2>
+      <p class="landing-section-desc">ดูตัวอย่าง Widget ยอดนิยมก่อน Login — ปรับสี โถ และรูปแบบได้เต็มที่หลังเข้า Dashboard</p>
+      <div class="landing-showcase-grid overlay-grid">
+        <article class="landing-showcase-item overlay-item">
+          <strong>❤️ Top Likers</strong>
+          <div class="bg-preview-inline" id="landingTopLikersPreview"></div>
+          <p class="preview-caption">อันดับผู้กดไลค์สูงสุด อัปเดตเรียลไทม์</p>
+        </article>
+        <article class="landing-showcase-item overlay-item">
+          <strong>💬 Chat Overlay</strong>
+          <div class="bg-preview-inline" id="landingChatPreview"></div>
+          <p class="preview-caption">แสดงข้อความแชทผู้ชมบนจอไลฟ์</p>
+        </article>
+        <article class="landing-showcase-item overlay-item">
+          <strong>🎁 Gift Jar</strong>
+          <div class="physics-preview-wrap">
+            <div class="physics-preview-scaler">
+              <iframe id="landingPhysicsJarPreview" class="physics-preview-frame" title="ตัวอย่าง Gift Jar jar6"></iframe>
+            </div>
+          </div>
+          <p class="preview-caption">ของขวัญตกลงโถแก้วแมวด้วยฟิสิกส์จริง</p>
         </article>
       </div>
     </section>
@@ -725,6 +777,10 @@
         <li>
           <strong>❤️ Like Hearts &amp; Ranking</strong>
           <span>หัวใจลอยเมื่อมีคนกดไลค์ พร้อม Top Likers และ Top Gifters อัปเดตสด</span>
+        </li>
+        <li>
+          <strong>อื่นๆ...</strong>
+          
         </li>
       </ul>
     </section>
@@ -1758,13 +1814,7 @@
       });
     }
 
-    function setPhysicsPreviewFrame(
-      jarId = selectedPhysicsJar,
-      coins = selectedPhysicsShowCoins,
-      giftSize = selectedPhysicsGiftSize
-    ) {
-      const frame = document.getElementById('physicsJarPreview');
-      if (!frame) return;
+    function buildPhysicsPreviewUrl(jarId, coins = 'show', giftSize = 'normal') {
       const url = new URL('/gift-jar-physics.html', window.location.origin);
       url.searchParams.set('jar', jarId);
       url.searchParams.set('coins', coins);
@@ -1772,10 +1822,43 @@
       const giftSizeParam = giftSizeUrlParam(giftSize);
       if (giftSizeParam) url.searchParams.set('giftsize', giftSizeParam);
       url.searchParams.set('preview', '1');
+      return url.toString();
+    }
+
+    function loadPhysicsPreviewFrame(frame, jarId, coins = 'show', giftSize = 'normal') {
+      if (!frame) return;
+      const url = buildPhysicsPreviewUrl(jarId, coins, giftSize);
       frame.src = 'about:blank';
       setTimeout(() => {
-        frame.src = url.toString();
+        frame.src = url;
       }, 50);
+    }
+
+    function setPhysicsPreviewFrame(
+      jarId = selectedPhysicsJar,
+      coins = selectedPhysicsShowCoins,
+      giftSize = selectedPhysicsGiftSize
+    ) {
+      loadPhysicsPreviewFrame(document.getElementById('physicsJarPreview'), jarId, coins, giftSize);
+    }
+
+    function initLandingShowcase() {
+      const topEl = document.getElementById('landingTopLikersPreview');
+      if (topEl) {
+        topEl.innerHTML = renderTopLikersPreview('transparent', 'white', 'white', 'md', 'md');
+      }
+
+      const chatEl = document.getElementById('landingChatPreview');
+      if (chatEl) {
+        chatEl.innerHTML = renderBgPreview('chat', 'dim');
+      }
+
+      loadPhysicsPreviewFrame(
+        document.getElementById('landingPhysicsJarPreview'),
+        'jar6',
+        'show',
+        'normal'
+      );
     }
 
     function updatePhysicsJarOverlay() {
@@ -3152,6 +3235,7 @@
     window.addEventListener('DOMContentLoaded', async () => {
       loadSavedJarPreference();
       loadSavedBgPreferences();
+      initLandingShowcase();
       bindEvents();
       await loadAppConfig();
       await restoreSession();
