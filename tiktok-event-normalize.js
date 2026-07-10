@@ -102,10 +102,34 @@ function normalizeLikeEvent(data) {
   return { user, likeCount };
 }
 
+function normalizeSocialEvent(data) {
+  return { user: normalizeTikTokUser(data) };
+}
+
+function normalizeBarrageEvent(data) {
+  return { user: normalizeTikTokUser(data) };
+}
+
+function buildActivityPayload(type, user, extra = {}) {
+  const nickname = user?.nickname || user?.uniqueId || 'ผู้ชม';
+  return {
+    type,
+    nickname,
+    avatar: user?.avatar || '',
+    text: extra.text || '',
+    icon: extra.icon || '',
+    giftPictureUrl: extra.giftPictureUrl || '',
+    count: Number(extra.count) || 0,
+  };
+}
+
 module.exports = {
   pickImageUrl,
   normalizeTikTokUser,
   normalizeChatEvent,
   normalizeGiftEvent,
   normalizeLikeEvent,
+  normalizeSocialEvent,
+  normalizeBarrageEvent,
+  buildActivityPayload,
 };
