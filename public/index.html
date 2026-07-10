@@ -1108,6 +1108,81 @@
       height: 30px;
       object-fit: contain;
     }
+    .activity-preview-wrap .activity-text--solo {
+      font-weight: 600;
+      opacity: 1;
+      white-space: normal;
+    }
+
+    .action-type-block {
+      margin: 8px 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background: #141414;
+    }
+    .action-type-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .action-type-head label {
+      margin: 0;
+      flex: 1;
+      font-size: 14px;
+      color: #ddd;
+      cursor: pointer;
+    }
+    .action-type-head input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #ff0050;
+      cursor: pointer;
+    }
+    .action-type-detail {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #2a2a2a;
+    }
+    .action-type-detail[hidden] { display: none; }
+    .action-template-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 9px 10px;
+      margin: 6px 0 4px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #111;
+      color: #fff;
+      font-size: 14px;
+    }
+    .action-template-hint {
+      font-size: 11px;
+      color: #777;
+      margin: 0 0 6px;
+      line-height: 1.4;
+    }
+    .action-min-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .action-min-row label {
+      margin: 0;
+      font-size: 12px;
+      color: #999;
+      flex: 1;
+    }
+    .action-min-row input {
+      width: 88px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #111;
+      color: #fff;
+      font-size: 13px;
+    }
 
     @keyframes heartsDemoFloat {
       0% { transform: translateY(0) scale(0.5); opacity: 1; }
@@ -1411,10 +1486,12 @@
       <div class="overlay-tabs" role="tablist">
         <button class="overlay-tab active" type="button" role="tab" data-tab="overlay" aria-selected="true">🎁 Widgets</button>
         <button class="overlay-tab" type="button" role="tab" data-tab="tts" aria-selected="false">🔊 TTS (เสียง)</button>
+        <button class="overlay-tab" type="button" role="tab" data-tab="action" aria-selected="false">⚡ Action</button>
       </div>
       <div id="overlay-box">
         <div id="urls-overlay" class="overlay-grid overlay-tab-panel active" role="tabpanel"></div>
         <div id="urls-tts" class="overlay-grid overlay-tab-panel" role="tabpanel"></div>
+        <div id="urls-action" class="overlay-grid overlay-tab-panel" role="tabpanel"></div>
       </div>
       <div class="help" id="overlayHint" style="margin-top:8px;">กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ — ไม่ต้องเชื่อมต่อก็ใช้งานได้</div>
     </div>
@@ -1422,12 +1499,13 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/tts-text-utils.js?v=1.0.14"></script>
-  <script src="/js/tts-config.js?v=1.0.14"></script>
-  <script src="/js/tts-overlay.js?v=1.0.14"></script>
-  <script src="/js/hearts-config.js?v=1.0.14"></script>
-  <script src="/js/goal-config.js?v=1.0.14"></script>
-  <script src="/js/activity-config.js?v=1.0.14"></script>
+  <script src="/js/tts-text-utils.js?v=1.0.15"></script>
+  <script src="/js/tts-config.js?v=1.0.15"></script>
+  <script src="/js/tts-overlay.js?v=1.0.15"></script>
+  <script src="/js/hearts-config.js?v=1.0.15"></script>
+  <script src="/js/goal-config.js?v=1.0.15"></script>
+  <script src="/js/activity-config.js?v=1.0.15"></script>
+  <script src="/js/action-alert-config.js?v=1.0.15"></script>
   <script>
     let socket = null;
     let socketReadyPromise = null;
@@ -1464,14 +1542,19 @@
     let selectedActivityFontSize = 'md';
     let selectedActivityTextColor = '#ffffff';
     let selectedActivityBorderColor = '#ff0050';
+    let selectedActivityBg = 'dim';
+    let actionAlertConfig = createDefaultActionAlertConfig();
     let goalDemoCurrent = 0;
     let jarDemoTimer = null;
     let heartsDemoTimer = null;
     let goalDemoTimer = null;
     let activityDemoTimer = null;
     let activityDemoIndex = 0;
+    let actionAlertDemoTimer = null;
+    let actionAlertDemoIndex = 0;
     const heartsDemoTimeouts = [];
     const activityDemoTimeouts = [];
+    const actionAlertDemoTimeouts = [];
 
     const JAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((id) => ({
       id,
@@ -1608,6 +1691,8 @@
       const savedActivityFontSize = localStorage.getItem('tgj_activity_fontsize');
       const savedActivityTextColor = localStorage.getItem('tgj_activity_textcolor');
       const savedActivityBorderColor = localStorage.getItem('tgj_activity_bordercolor');
+      const savedActivityBg = localStorage.getItem('tgj_activity_bg');
+      const savedActionAlertConfig = localStorage.getItem('tgj_action_alert_config');
       if (savedActivityFontSize) {
         selectedActivityFontSize = parseActivityFontSizeParam(savedActivityFontSize, selectedActivityFontSize);
       }
@@ -1616,6 +1701,16 @@
       }
       if (savedActivityBorderColor) {
         selectedActivityBorderColor = parseActivityColorParam(savedActivityBorderColor, selectedActivityBorderColor);
+      }
+      if (savedActivityBg) {
+        selectedActivityBg = parseActivityBgParam(savedActivityBg, selectedActivityBg);
+      }
+      if (savedActionAlertConfig) {
+        try {
+          actionAlertConfig = mergeActionAlertConfig(JSON.parse(savedActionAlertConfig));
+        } catch (_) {
+          actionAlertConfig = createDefaultActionAlertConfig();
+        }
       }
     }
 
@@ -2396,7 +2491,7 @@
       renderOverlayPanels();
     }
 
-    const OVERLAY_ASSET_VERSION = '1.0.14';
+    const OVERLAY_ASSET_VERSION = '1.0.15';
 
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);
@@ -2686,18 +2781,21 @@
         fontSizeId: selectedActivityFontSize,
         textColor: selectedActivityTextColor,
         borderColor: selectedActivityBorderColor,
+        bgId: selectedActivityBg,
       };
     }
 
     function getActivityFeedUrl(
       fontSizeId = selectedActivityFontSize,
       textColor = selectedActivityTextColor,
-      borderColor = selectedActivityBorderColor
+      borderColor = selectedActivityBorderColor,
+      bgId = selectedActivityBg
     ) {
       return buildOverlayUrl('/activity-feed.html', getOverlayUsername(), {
         fontsize: fontSizeId,
         textcolor: stripActivityColorForUrl(textColor),
         bordercolor: stripActivityColorForUrl(borderColor),
+        bg: bgId,
       });
     }
 
@@ -2718,7 +2816,16 @@
       const borderHex = document.getElementById('activityBorderColorHex');
       if (borderHex) borderHex.textContent = selectedActivityBorderColor;
 
+      const bgSelect = document.getElementById('activityBgSelect');
+      if (bgSelect) bgSelect.value = selectedActivityBg;
+
       renderActivityPreview();
+    }
+
+    function selectActivityBg(bgId) {
+      selectedActivityBg = parseActivityBgParam(bgId, selectedActivityBg);
+      localStorage.setItem('tgj_activity_bg', selectedActivityBg);
+      updateActivityFeedOverlay();
     }
 
     function selectActivityFontSize(sizeId) {
@@ -2869,6 +2976,23 @@
       borderColorPicker.addEventListener('input', () => selectActivityBorderColor(borderColorPicker.value));
       borderColorRow.append(borderColorLabel, borderColorPicker, borderColorHex);
 
+      const bgLabel = document.createElement('label');
+      bgLabel.textContent = 'สีพื้นหลัง';
+      bgLabel.setAttribute('for', 'activityBgSelect');
+      bgLabel.style.marginTop = '8px';
+
+      const bgSelect = document.createElement('select');
+      bgSelect.id = 'activityBgSelect';
+      bgSelect.className = 'jar-select';
+      BG_STYLE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedActivityBg) option.selected = true;
+        bgSelect.appendChild(option);
+      });
+      bgSelect.addEventListener('change', () => selectActivityBg(bgSelect.value));
+
       const previewCaption = document.createElement('p');
       previewCaption.className = 'preview-caption';
       previewCaption.textContent = 'แสดงกิจกรรมผู้ชมทีละรายการ (ไลค์รวม, ติดตาม, แชร์, ของขวัญ combo, Subscribe)';
@@ -2882,11 +3006,516 @@
         fontSelect,
         textColorRow,
         borderColorRow,
+        bgLabel,
+        bgSelect,
         previewWrap,
         previewCaption
       );
       item.appendChild(pickerRow);
       startActivityDemoAnimation();
+      return item;
+    }
+
+    function saveActionAlertConfig() {
+      localStorage.setItem('tgj_action_alert_config', JSON.stringify(actionAlertConfig));
+    }
+
+    function getActionAlertUrl(config = actionAlertConfig) {
+      return buildOverlayUrl('/action-alert.html', getOverlayUsername(), buildActionAlertUrlParams(config));
+    }
+
+    function updateActionAlertOverlay() {
+      actionAlertConfig = mergeActionAlertConfig(actionAlertConfig);
+      saveActionAlertConfig();
+
+      const link = document.getElementById('actionAlertLinkText');
+      if (link) link.textContent = getActionAlertUrl();
+
+      const durationInput = document.getElementById('actionAlertDurationInput');
+      if (durationInput) durationInput.value = String(actionAlertConfig.displaySec);
+
+      const bgSelect = document.getElementById('actionAlertBgSelect');
+      if (bgSelect) bgSelect.value = actionAlertConfig.bgId;
+
+      const fontSelect = document.getElementById('actionAlertFontSizeSelect');
+      if (fontSelect) fontSelect.value = actionAlertConfig.fontSizeId;
+
+      const textPicker = document.getElementById('actionAlertTextColorPicker');
+      if (textPicker) textPicker.value = actionAlertConfig.textColor;
+      const textHex = document.getElementById('actionAlertTextColorHex');
+      if (textHex) textHex.textContent = actionAlertConfig.textColor;
+
+      const borderPicker = document.getElementById('actionAlertBorderColorPicker');
+      if (borderPicker) borderPicker.value = actionAlertConfig.borderColor;
+      const borderHex = document.getElementById('actionAlertBorderColorHex');
+      if (borderHex) borderHex.textContent = actionAlertConfig.borderColor;
+
+      const voiceSelect = document.getElementById('actionAlertVoiceSelect');
+      if (voiceSelect) voiceSelect.value = actionAlertConfig.voice;
+
+      const volumeRange = document.getElementById('actionAlertVolumeRange');
+      if (volumeRange) volumeRange.value = String(actionAlertConfig.volume);
+      const volumeValue = document.getElementById('actionAlertVolumeValue');
+      if (volumeValue) volumeValue.textContent = `${actionAlertConfig.volume}%`;
+
+      const speedRange = document.getElementById('actionAlertSpeedRange');
+      if (speedRange) speedRange.value = String(actionAlertConfig.speed);
+      const speedValue = document.getElementById('actionAlertSpeedValue');
+      if (speedValue) speedValue.textContent = `${actionAlertConfig.speed}%`;
+
+      ACTION_ALERT_TYPE_DEFS.forEach((def) => {
+        const checkbox = document.getElementById(`actionEnable_${def.id}`);
+        const detail = document.getElementById(`actionDetail_${def.id}`);
+        const templateInput = document.getElementById(`actionTemplate_${def.id}`);
+        if (checkbox) checkbox.checked = !!actionAlertConfig.enabled[def.id];
+        if (detail) detail.hidden = !actionAlertConfig.enabled[def.id];
+        if (templateInput) templateInput.value = actionAlertConfig.templates[def.id];
+        if (def.hasMinCoin) {
+          const minInput = document.getElementById('actionGiftMinCoin');
+          if (minInput) minInput.value = String(actionAlertConfig.giftMinCoin);
+        }
+        if (def.hasMinLikes) {
+          const minInput = document.getElementById('actionLikeMinCount');
+          if (minInput) minInput.value = String(actionAlertConfig.likeMinCount);
+        }
+      });
+
+      renderActionAlertPreview();
+    }
+
+    function setActionAlertEnabled(typeId, enabled) {
+      actionAlertConfig.enabled[typeId] = !!enabled;
+      updateActionAlertOverlay();
+    }
+
+    function setActionAlertTemplate(typeId, template) {
+      actionAlertConfig.templates[typeId] = String(template || '').trim()
+        || ACTION_ALERT_TYPE_DEFS.find((item) => item.id === typeId)?.defaultTemplate
+        || '';
+      updateActionAlertOverlay();
+    }
+
+    function setActionAlertGiftMinCoin(value) {
+      actionAlertConfig.giftMinCoin = parseActionAlertMinValue(value, actionAlertConfig.giftMinCoin);
+      updateActionAlertOverlay();
+    }
+
+    function setActionAlertLikeMinCount(value) {
+      actionAlertConfig.likeMinCount = parseActionAlertMinValue(value, actionAlertConfig.likeMinCount);
+      updateActionAlertOverlay();
+    }
+
+    function renderActionAlertPreview() {
+      const container = document.getElementById('actionAlertDemoPreview');
+      if (!container) return;
+
+      const enabledTypes = getEnabledActionAlertDemoTypes(actionAlertConfig);
+      if (!enabledTypes.length) {
+        container.innerHTML = '<p class="preview-caption" style="margin:0;color:#888;">เปิดใช้งานอย่างน้อย 1 การกระทำเพื่อดูตัวอย่าง</p>';
+        return;
+      }
+
+      const typeId = enabledTypes[actionAlertDemoIndex % enabledTypes.length];
+      const event = ACTION_ALERT_DEMO_EVENTS[typeId];
+      const message = resolveActionAlertMessage(actionAlertConfig, event);
+      container.innerHTML = buildActionAlertCardMarkup(event, message, actionAlertConfig);
+      const card = container.querySelector('.activity-card');
+      if (card) requestAnimationFrame(() => card.classList.add('visible'));
+    }
+
+    function stopActionAlertDemoAnimation() {
+      if (actionAlertDemoTimer) {
+        clearInterval(actionAlertDemoTimer);
+        actionAlertDemoTimer = null;
+      }
+      actionAlertDemoTimeouts.splice(0).forEach((id) => clearTimeout(id));
+      const container = document.getElementById('actionAlertDemoPreview');
+      if (container) container.replaceChildren();
+      actionAlertDemoIndex = 0;
+    }
+
+    function startActionAlertDemoAnimation() {
+      stopActionAlertDemoAnimation();
+      renderActionAlertPreview();
+      actionAlertDemoTimer = setInterval(() => {
+        const container = document.getElementById('actionAlertDemoPreview');
+        if (!container) return;
+        const enabledTypes = getEnabledActionAlertDemoTypes(actionAlertConfig);
+        if (!enabledTypes.length) {
+          renderActionAlertPreview();
+          return;
+        }
+        const card = container.querySelector('.activity-card');
+        if (card) {
+          card.classList.remove('visible');
+          const timeoutId = setTimeout(() => {
+            actionAlertDemoIndex += 1;
+            renderActionAlertPreview();
+          }, 360);
+          actionAlertDemoTimeouts.push(timeoutId);
+        } else {
+          actionAlertDemoIndex += 1;
+          renderActionAlertPreview();
+        }
+      }, 3600);
+    }
+
+    function createActionTypeSettingBlock(def) {
+      const block = document.createElement('div');
+      block.className = 'action-type-block';
+
+      const head = document.createElement('div');
+      head.className = 'action-type-head';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = `actionEnable_${def.id}`;
+      checkbox.checked = !!actionAlertConfig.enabled[def.id];
+      checkbox.addEventListener('change', () => {
+        detail.hidden = !checkbox.checked;
+        setActionAlertEnabled(def.id, checkbox.checked);
+      });
+
+      const label = document.createElement('label');
+      label.setAttribute('for', checkbox.id);
+      label.textContent = `${def.icon} ${def.label}`;
+
+      head.append(checkbox, label);
+      block.appendChild(head);
+
+      const detail = document.createElement('div');
+      detail.className = 'action-type-detail';
+      detail.id = `actionDetail_${def.id}`;
+      detail.hidden = !checkbox.checked;
+
+      const hint = document.createElement('p');
+      hint.className = 'action-template-hint';
+      hint.textContent = 'ตัวแปร: {username} {giftname} {coin} — ใช้ {coin} เป็นจำนวนเหรียญหรือจำนวนไลค์';
+
+      const templateInput = document.createElement('input');
+      templateInput.type = 'text';
+      templateInput.className = 'action-template-input';
+      templateInput.id = `actionTemplate_${def.id}`;
+      templateInput.value = actionAlertConfig.templates[def.id];
+      templateInput.placeholder = def.defaultTemplate;
+      templateInput.addEventListener('change', () => setActionAlertTemplate(def.id, templateInput.value));
+      templateInput.addEventListener('input', () => {
+        actionAlertConfig.templates[def.id] = templateInput.value;
+        renderActionAlertPreview();
+      });
+
+      detail.append(hint, templateInput);
+
+      if (def.hasMinCoin) {
+        const minRow = document.createElement('div');
+        minRow.className = 'action-min-row';
+        const minLabel = document.createElement('label');
+        minLabel.setAttribute('for', 'actionGiftMinCoin');
+        minLabel.textContent = 'เหรียญขั้นต่ำ (ต่ำกว่านี้ไม่อ่าน/ไม่แสดง)';
+        const minInput = document.createElement('input');
+        minInput.type = 'number';
+        minInput.id = 'actionGiftMinCoin';
+        minInput.min = '0';
+        minInput.step = '1';
+        minInput.value = String(actionAlertConfig.giftMinCoin);
+        minInput.addEventListener('change', () => setActionAlertGiftMinCoin(minInput.value));
+        minRow.append(minLabel, minInput);
+        detail.appendChild(minRow);
+      }
+
+      if (def.hasMinLikes) {
+        const minRow = document.createElement('div');
+        minRow.className = 'action-min-row';
+        const minLabel = document.createElement('label');
+        minLabel.setAttribute('for', 'actionLikeMinCount');
+        minLabel.textContent = 'ไลค์ขั้นต่ำ (ต่ำกว่านี้ไม่อ่าน/ไม่แสดง)';
+        const minInput = document.createElement('input');
+        minInput.type = 'number';
+        minInput.id = 'actionLikeMinCount';
+        minInput.min = '0';
+        minInput.step = '1';
+        minInput.value = String(actionAlertConfig.likeMinCount);
+        minInput.addEventListener('change', () => setActionAlertLikeMinCount(minInput.value));
+        minRow.append(minLabel, minInput);
+        detail.appendChild(minRow);
+      }
+
+      block.appendChild(detail);
+      return block;
+    }
+
+    function createActionAlertOverlayItem() {
+      actionAlertConfig = mergeActionAlertConfig(actionAlertConfig);
+      const getUrl = () => getActionAlertUrl();
+
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+
+      const top = document.createElement('div');
+      top.className = 'overlay-item-top';
+
+      const info = document.createElement('div');
+      info.className = 'overlay-item-info';
+      info.innerHTML = `
+        <strong>⚡ Action Alert + TTS</strong><br>
+        <span id="actionAlertLinkText">${getUrl()}</span>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'overlay-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'small-btn';
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => copyToClipboard(getUrl(), copyBtn));
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'small-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => window.open(getUrl(), '_blank'));
+
+      actions.append(copyBtn, openBtn);
+      top.append(info, actions);
+      item.appendChild(top);
+
+      const pickerRow = document.createElement('div');
+      pickerRow.className = 'jar-picker-row';
+
+      const actionsTitle = document.createElement('label');
+      actionsTitle.textContent = 'เลือกการกระทำที่ต้องการ';
+      actionsTitle.style.marginTop = '0';
+
+      const actionsWrap = document.createElement('div');
+      ACTION_ALERT_TYPE_DEFS.forEach((def) => {
+        actionsWrap.appendChild(createActionTypeSettingBlock(def));
+      });
+
+      const durationLabel = document.createElement('label');
+      durationLabel.textContent = 'ระยะเวลาแสดง (วินาที)';
+      durationLabel.setAttribute('for', 'actionAlertDurationInput');
+      durationLabel.style.marginTop = '10px';
+
+      const durationInput = document.createElement('input');
+      durationInput.type = 'number';
+      durationInput.id = 'actionAlertDurationInput';
+      durationInput.className = 'jar-select';
+      durationInput.min = '2';
+      durationInput.max = '15';
+      durationInput.step = '1';
+      durationInput.value = String(actionAlertConfig.displaySec);
+      durationInput.addEventListener('change', () => {
+        actionAlertConfig.displaySec = parseActionAlertDurationSec(durationInput.value, actionAlertConfig.displaySec);
+        updateActionAlertOverlay();
+      });
+
+      const bgLabel = document.createElement('label');
+      bgLabel.textContent = 'สีพื้นหลัง';
+      bgLabel.setAttribute('for', 'actionAlertBgSelect');
+
+      const bgSelect = document.createElement('select');
+      bgSelect.id = 'actionAlertBgSelect';
+      bgSelect.className = 'jar-select';
+      BG_STYLE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === actionAlertConfig.bgId) option.selected = true;
+        bgSelect.appendChild(option);
+      });
+      bgSelect.addEventListener('change', () => {
+        actionAlertConfig.bgId = parseActivityBgParam(bgSelect.value, actionAlertConfig.bgId);
+        updateActionAlertOverlay();
+      });
+
+      const fontLabel = document.createElement('label');
+      fontLabel.textContent = 'ขนาดตัวอักษร';
+      fontLabel.setAttribute('for', 'actionAlertFontSizeSelect');
+
+      const fontSelect = document.createElement('select');
+      fontSelect.id = 'actionAlertFontSizeSelect';
+      fontSelect.className = 'jar-select';
+      ACTIVITY_FONT_SIZE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === actionAlertConfig.fontSizeId) option.selected = true;
+        fontSelect.appendChild(option);
+      });
+      fontSelect.addEventListener('change', () => {
+        actionAlertConfig.fontSizeId = parseActivityFontSizeParam(fontSelect.value, actionAlertConfig.fontSizeId);
+        updateActionAlertOverlay();
+      });
+
+      const textColorRow = document.createElement('div');
+      textColorRow.className = 'activity-color-row';
+      const textColorLabel = document.createElement('label');
+      textColorLabel.textContent = 'สีตัวอักษร';
+      textColorLabel.setAttribute('for', 'actionAlertTextColorPicker');
+      const textColorPicker = document.createElement('input');
+      textColorPicker.type = 'color';
+      textColorPicker.id = 'actionAlertTextColorPicker';
+      textColorPicker.value = actionAlertConfig.textColor;
+      const textColorHex = document.createElement('span');
+      textColorHex.className = 'activity-color-hex';
+      textColorHex.id = 'actionAlertTextColorHex';
+      textColorHex.textContent = actionAlertConfig.textColor;
+      textColorPicker.addEventListener('input', () => {
+        actionAlertConfig.textColor = parseActivityColorParam(textColorPicker.value, actionAlertConfig.textColor);
+        updateActionAlertOverlay();
+      });
+      textColorRow.append(textColorLabel, textColorPicker, textColorHex);
+
+      const borderColorRow = document.createElement('div');
+      borderColorRow.className = 'activity-color-row';
+      const borderColorLabel = document.createElement('label');
+      borderColorLabel.textContent = 'สีขอบรูป';
+      borderColorLabel.setAttribute('for', 'actionAlertBorderColorPicker');
+      const borderColorPicker = document.createElement('input');
+      borderColorPicker.type = 'color';
+      borderColorPicker.id = 'actionAlertBorderColorPicker';
+      borderColorPicker.value = actionAlertConfig.borderColor;
+      const borderColorHex = document.createElement('span');
+      borderColorHex.className = 'activity-color-hex';
+      borderColorHex.id = 'actionAlertBorderColorHex';
+      borderColorHex.textContent = actionAlertConfig.borderColor;
+      borderColorPicker.addEventListener('input', () => {
+        actionAlertConfig.borderColor = parseActivityColorParam(borderColorPicker.value, actionAlertConfig.borderColor);
+        updateActionAlertOverlay();
+      });
+      borderColorRow.append(borderColorLabel, borderColorPicker, borderColorHex);
+
+      const voiceLabel = document.createElement('label');
+      voiceLabel.textContent = 'เสียงพูด (TTS)';
+      voiceLabel.setAttribute('for', 'actionAlertVoiceSelect');
+      voiceLabel.style.marginTop = '8px';
+
+      const voiceSelect = document.createElement('select');
+      voiceSelect.id = 'actionAlertVoiceSelect';
+      voiceSelect.className = 'jar-select';
+      TTS_VOICE_PRESETS.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = preset.id;
+        option.textContent = `${preset.label} — ${preset.hint}`;
+        if (preset.id === actionAlertConfig.voice) option.selected = true;
+        voiceSelect.appendChild(option);
+      });
+      voiceSelect.addEventListener('change', () => {
+        actionAlertConfig.voice = voiceSelect.value;
+        updateActionAlertOverlay();
+      });
+
+      const volumeLabel = document.createElement('label');
+      volumeLabel.textContent = 'ความดังเสียง';
+      const volumeWrap = document.createElement('div');
+      volumeWrap.className = 'tts-range-wrap';
+      const volumeRange = document.createElement('input');
+      volumeRange.type = 'range';
+      volumeRange.className = 'tts-range';
+      volumeRange.id = 'actionAlertVolumeRange';
+      volumeRange.min = '0';
+      volumeRange.max = '100';
+      volumeRange.step = '5';
+      volumeRange.value = String(actionAlertConfig.volume);
+      const volumeValue = document.createElement('span');
+      volumeValue.id = 'actionAlertVolumeValue';
+      volumeValue.className = 'tts-range-value';
+      volumeValue.textContent = `${actionAlertConfig.volume}%`;
+      bindRangeInput(volumeRange, () => {
+        actionAlertConfig.volume = parseTtsVolume(volumeRange.value);
+        volumeValue.textContent = `${actionAlertConfig.volume}%`;
+        updateActionAlertOverlay();
+      });
+      volumeWrap.append(volumeRange, volumeValue);
+
+      const speedLabel = document.createElement('label');
+      speedLabel.textContent = 'ความเร็วการพูด';
+      const speedWrap = document.createElement('div');
+      speedWrap.className = 'tts-range-wrap';
+      const speedRange = document.createElement('input');
+      speedRange.type = 'range';
+      speedRange.className = 'tts-range';
+      speedRange.id = 'actionAlertSpeedRange';
+      speedRange.min = '50';
+      speedRange.max = '150';
+      speedRange.step = '5';
+      speedRange.value = String(actionAlertConfig.speed);
+      const speedValue = document.createElement('span');
+      speedValue.id = 'actionAlertSpeedValue';
+      speedValue.className = 'tts-range-value';
+      speedValue.textContent = `${actionAlertConfig.speed}%`;
+      bindRangeInput(speedRange, () => {
+        actionAlertConfig.speed = parseTtsSpeed(speedRange.value);
+        speedValue.textContent = `${actionAlertConfig.speed}%`;
+        updateActionAlertOverlay();
+      });
+      speedWrap.append(speedRange, speedValue);
+
+      const previewVoiceBtn = document.createElement('button');
+      previewVoiceBtn.className = 'btn btn-secondary';
+      previewVoiceBtn.type = 'button';
+      previewVoiceBtn.textContent = '🔊 ทดลองอ่านข้อความตัวอย่าง';
+      previewVoiceBtn.style.marginTop = '4px';
+      previewVoiceBtn.addEventListener('click', async () => {
+        const enabledTypes = getEnabledActionAlertDemoTypes(actionAlertConfig);
+        if (!enabledTypes.length) {
+          showMessage('เปิดใช้งานอย่างน้อย 1 การกระทำก่อนทดลองฟัง', true);
+          return;
+        }
+        const typeId = enabledTypes[actionAlertDemoIndex % enabledTypes.length];
+        const event = ACTION_ALERT_DEMO_EVENTS[typeId];
+        const line = extractSpeakableText(resolveActionAlertMessage(actionAlertConfig, event), 180);
+        previewVoiceBtn.disabled = true;
+        const originalText = previewVoiceBtn.textContent;
+        previewVoiceBtn.textContent = 'กำลังเล่น...';
+        try {
+          await previewTtsVoice(
+            actionAlertConfig.voice,
+            actionAlertConfig.volume,
+            actionAlertConfig.speed,
+            'text',
+            line
+          );
+        } catch (_) {
+          showMessage('เล่นเสียงไม่สำเร็จ — ลองอีกครั้ง', true);
+        } finally {
+          previewVoiceBtn.disabled = false;
+          previewVoiceBtn.textContent = originalText;
+        }
+      });
+
+      const previewCaption = document.createElement('p');
+      previewCaption.className = 'preview-caption';
+      previewCaption.textContent = 'แสดงข้อความและอ่านเสียงเมื่อมีการกระทำ — คิวแยกจาก Activity Feed';
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'activity-preview-wrap';
+      previewWrap.id = 'actionAlertDemoPreview';
+
+      pickerRow.append(
+        actionsTitle,
+        actionsWrap,
+        durationLabel,
+        durationInput,
+        bgLabel,
+        bgSelect,
+        fontLabel,
+        fontSelect,
+        textColorRow,
+        borderColorRow,
+        voiceLabel,
+        voiceSelect,
+        volumeLabel,
+        volumeWrap,
+        speedLabel,
+        speedWrap,
+        previewVoiceBtn,
+        previewWrap,
+        previewCaption
+      );
+      item.appendChild(pickerRow);
+      startActionAlertDemoAnimation();
       return item;
     }
 
@@ -4301,20 +4930,24 @@
     function renderOverlayPanels() {
       const overlayDiv = document.getElementById('urls-overlay');
       const ttsDiv = document.getElementById('urls-tts');
-      if (!overlayDiv || !ttsDiv) return;
+      const actionDiv = document.getElementById('urls-action');
+      if (!overlayDiv || !ttsDiv || !actionDiv) return;
 
       stopJarDemoAnimation();
       stopHeartsDemoAnimation();
       stopGoalDemoAnimation();
       stopActivityDemoAnimation();
+      stopActionAlertDemoAnimation();
 
       overlayDiv.replaceChildren();
       ttsDiv.replaceChildren();
+      actionDiv.replaceChildren();
 
       const username = getOverlayUsername();
       if (!username) {
         overlayDiv.appendChild(createOverlayEmptyState('กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ Overlay'));
         ttsDiv.appendChild(createOverlayEmptyState('กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ TTS'));
+        actionDiv.appendChild(createOverlayEmptyState('กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ Action'));
         return;
       }
 
@@ -4329,6 +4962,7 @@
       overlayDiv.appendChild(createActivityFeedOverlayItem());
 
       ttsDiv.appendChild(createGiftTtsOverlayItem());
+      actionDiv.appendChild(createActionAlertOverlayItem());
     }
 
     function copyToClipboard(text, btn) {

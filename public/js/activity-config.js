@@ -7,6 +7,7 @@ const ACTIVITY_FONT_SIZE_OPTIONS = [
 
 const ACTIVITY_DEFAULT_TEXT_COLOR = '#ffffff';
 const ACTIVITY_DEFAULT_BORDER_COLOR = '#ff0050';
+const ACTIVITY_DEFAULT_BG_ID = 'dim';
 
 const ACTIVITY_DEMO_ITEMS = [
   {
@@ -78,12 +79,25 @@ function parseActivityColorParam(value, fallback) {
   return sanitizeHexColor(withHash, fallback);
 }
 
+function parseActivityBgParam(value, fallback = ACTIVITY_DEFAULT_BG_ID) {
+  const raw = String(value ?? '').trim().toLowerCase();
+  return raw === 'transparent' ? 'transparent' : (raw === 'dim' ? 'dim' : fallback);
+}
+
+function getActivityCardBgStyle(bgId = ACTIVITY_DEFAULT_BG_ID) {
+  if (bgId === 'transparent') {
+    return 'background:transparent;border:none;box-shadow:none;';
+  }
+  return 'background:rgba(8,8,12,0.78);border:1px solid rgba(255,255,255,0.1);box-shadow:0 8px 24px rgba(0,0,0,0.35);';
+}
+
 function readActivityConfigFromUrl(search = window.location.search) {
   const params = new URLSearchParams(search);
   return {
     fontSizeId: parseActivityFontSizeParam(params.get('fontsize')),
     textColor: parseActivityColorParam(params.get('textcolor'), ACTIVITY_DEFAULT_TEXT_COLOR),
     borderColor: parseActivityColorParam(params.get('bordercolor'), ACTIVITY_DEFAULT_BORDER_COLOR),
+    bgId: parseActivityBgParam(params.get('bg'), ACTIVITY_DEFAULT_BG_ID),
   };
 }
 
@@ -108,7 +122,10 @@ function buildActivityCardMarkup(item, config = {}) {
   const fontSizeId = config.fontSizeId || 'md';
   const textColor = config.textColor || ACTIVITY_DEFAULT_TEXT_COLOR;
   const borderColor = config.borderColor || ACTIVITY_DEFAULT_BORDER_COLOR;
+  const bgId = config.bgId || ACTIVITY_DEFAULT_BG_ID;
+  const showName = config.showName !== false;
   const fontPx = getActivityFontSizePx(fontSizeId);
+  const bgStyle = getActivityCardBgStyle(bgId);
   const nickname = escapeActivityHtml(item.nickname || 'ผู้ชม');
   const text = escapeActivityHtml(item.text || '');
   const icon = escapeActivityHtml(item.icon || '');
@@ -123,15 +140,20 @@ function buildActivityCardMarkup(item, config = {}) {
     ? `<img class="activity-gift" src="${giftUrl}" alt="">`
     : (icon ? `<span class="activity-icon">${icon}</span>` : '');
 
+  const nameHtml = showName
+    ? `<div class="activity-name">${nickname}</div>`
+    : '';
+  const textClass = showName ? 'activity-text' : 'activity-text activity-text--solo';
+
   return `
-    <div class="activity-card" style="--activity-text:${textColor};--activity-font:${fontPx}px;--activity-border:${borderColor}">
+    <div class="activity-card" style="--activity-text:${textColor};--activity-font:${fontPx}px;--activity-border:${borderColor};${bgStyle}">
       <div class="activity-avatar-wrap">
         ${avatarHtml}
         <div class="activity-avatar activity-avatar--placeholder" style="border-color:${borderColor};${placeholderStyle}">👤</div>
       </div>
       <div class="activity-body">
-        <div class="activity-name">${nickname}</div>
-        <div class="activity-text">${text}</div>
+        ${nameHtml}
+        <div class="${textClass}">${text}</div>
       </div>
       ${mediaHtml ? `<div class="activity-media">${mediaHtml}</div>` : ''}
     </div>`;

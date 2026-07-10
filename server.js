@@ -321,6 +321,11 @@ function emitActivity(username, payload) {
   emitToStream(username, 'activity', payload);
 }
 
+function emitActionAlert(username, payload) {
+  if (!username || !payload?.type) return;
+  emitToStream(username, 'actionAlert', payload);
+}
+
 function clearLikeBatches(stream) {
   if (!stream?.likeBatches) return;
   stream.likeBatches.forEach((batch) => {
@@ -344,6 +349,15 @@ function flushLikeBatch(stream, uid) {
     count,
     icon: '❤️',
   }));
+  emitActionAlert(stream.tiktokUsername, {
+    type: 'like',
+    nickname: batch.nickname || 'ผู้ชม',
+    avatar: batch.avatar || '',
+    giftName: '',
+    giftPictureUrl: '',
+    coin: count,
+    likeCount: count,
+  });
 }
 
 function trackLikeForActivity(stream, like) {
@@ -363,16 +377,26 @@ function trackLikeForActivity(stream, like) {
 
 function emitGiftActivity(stream, gift) {
   const {
-    user, giftName, giftPictureUrl, repeatCount, giftType, repeatEnd,
+    user, giftName, giftPictureUrl, repeatCount, giftType, repeatEnd, diamonds,
   } = gift;
   if (giftType === 1 && !repeatEnd) return;
   const count = repeatCount;
+  const coin = diamonds * count;
   emitActivity(stream.tiktokUsername, buildActivityPayload('gift', user, {
     text: `ส่ง ${giftName} x${count.toLocaleString('en-US')}`,
     count,
     giftPictureUrl: giftPictureUrl || '',
     icon: '🎁',
   }));
+  emitActionAlert(stream.tiktokUsername, {
+    type: 'gift',
+    nickname: user.nickname || user.uniqueId || 'ผู้ชม',
+    avatar: user.avatar || '',
+    giftName: giftName || '',
+    giftPictureUrl: giftPictureUrl || '',
+    coin,
+    likeCount: 0,
+  });
 }
 
 function getTikTokCredentials(email) {
@@ -965,6 +989,15 @@ function attachTikTokListeners(conn, email, connectionId) {
         text: 'ติดตามแล้ว',
         icon: '➕',
       }));
+      emitActionAlert(stream.tiktokUsername, {
+        type: 'follow',
+        nickname: user.nickname || user.uniqueId || 'ผู้ชม',
+        avatar: user.avatar || '',
+        giftName: '',
+        giftPictureUrl: '',
+        coin: 0,
+        likeCount: 0,
+      });
     } catch (err) {
       console.error('FOLLOW handler error:', err);
     }
@@ -979,6 +1012,15 @@ function attachTikTokListeners(conn, email, connectionId) {
         text: 'แชร์ไลฟ์',
         icon: '↗️',
       }));
+      emitActionAlert(stream.tiktokUsername, {
+        type: 'share',
+        nickname: user.nickname || user.uniqueId || 'ผู้ชม',
+        avatar: user.avatar || '',
+        giftName: '',
+        giftPictureUrl: '',
+        coin: 0,
+        likeCount: 0,
+      });
     } catch (err) {
       console.error('SHARE handler error:', err);
     }
@@ -1009,6 +1051,25 @@ function attachTikTokListeners(conn, email, connectionId) {
       }));
     } catch (err) {
       console.error('SUPER_FAN_JOIN handler error:', err);
+    }
+  });
+
+  conn.on(WebcastEvent.MEMBER, (data) => {
+    if (!isActive()) return;
+    try {
+      const stream = getOrCreateStream(email);
+      const user = normalizeTikTokUser(data);
+      emitActionAlert(stream.tiktokUsername, {
+        type: 'join',
+        nickname: user.nickname || user.uniqueId || 'ผู้ชม',
+        avatar: user.avatar || '',
+        giftName: '',
+        giftPictureUrl: '',
+        coin: 0,
+        likeCount: 0,
+      });
+    } catch (err) {
+      console.error('MEMBER handler error:', err);
     }
   });
 
