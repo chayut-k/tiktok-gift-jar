@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
+  <title>Gift Drop</title>
+  <script src="/js/jar-config.js?v=1.0.16"></script>
+  <script src="/js/gift-size.js?v=1.0.16"></script>
+  <script src="/js/gift-drop-config.js?v=1.0.16"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      background: transparent;
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+    body.preview-mode .stage,
+    body.overlay-mode .stage {
+      margin: 0;
+    }
+    body.preview-mode .below-stage {
+      display: block;
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 8px;
+      z-index: 20;
+      pointer-events: none;
+    }
+    body.overlay-mode .below-stage {
+      display: none;
+    }
+    body.preview-mode .test-hint {
+      color: #ccc;
+      text-shadow: 0 1px 4px #000;
+    }
+    .stage {
+      position: relative;
+      width: 460px;
+      height: 620px;
+      margin: 0 auto;
+    }
+    .jar-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .physics-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .coin-counter {
+      position: absolute;
+      bottom: 35px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.85);
+      color: #fff;
+      padding: 4px 16px;
+      border-radius: 22px;
+      font-size: 17px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .coin-counter img {
+      width: 30px;
+      height: 30px;
+    }
+    body[data-coins="hide"] .coin-counter {
+      display: none;
+    }
+    .label {
+      text-align: center;
+      color: #ffd700;
+      font-size: 23px;
+      margin-top: 15px;
+      text-shadow: 0 3px 12px #000;
+      font-weight: bold;
+    }
+    .test-hint {
+      text-align: center;
+      color: #888;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .helicopter {
+      position: absolute;
+      width: 86px;
+      height: auto;
+      top: 38px;
+      left: -140px;
+      z-index: 6;
+      pointer-events: none;
+      display: none;
+      filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+      will-change: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <img class="helicopter" id="helicopter" src="/images/helicopter.png" alt="">
+    <img class="jar-img" id="jar-img" src="/images/jar1.png" alt="โถแก้ว">
+    <div class="physics-layer" id="physics-layer"></div>
+    <div class="coin-counter" id="coin-counter">
+      <img src="/images/coin.png" alt="coin">
+      <span id="total">0</span>
+    </div>
+  </div>
+  <div class="below-stage">
+    <div class="label" id="last-gift">รอของขวัญ...</div>
+    <div class="test-hint" id="test-hint">G=1เหรียญ H=20เหรียญ J=100เหรียญ | R=รีเซ็ต | ?debug=1 แสดงกำแพงชน</div>
+  </div>
+
+  <script src="/js/matter.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js?v=1.0.16"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const isPreview = params.get('preview') === '1';
+    const isDebug = params.get('debug') === '1';
+    const isOverlay = !!params.get('user');
+    document.body.dataset.coins = getOverlayCoinsDisplay();
+    const GIFT_SIZE_MULTIPLIER = getOverlayGiftSizeMultiplier();
+    const dropConfig = readGiftDropConfigFromUrl();
+    const HELI_SPEED_MULT = dropConfig.speedMult;
+    const { jarId, jarConfig } = applyJarImage('jar-img');
+    const JAR = jarConfig.physics;
+
+    if (isPreview) {
+      document.body.classList.add('preview-mode');
+    } else if (isOverlay) {
+      document.body.classList.add('overlay-mode');
+    }
+
+    const STAGE_W = 460;
+    const STAGE_H = 620;
+    const FALLBACK_TEXTURE = '/images/rose.png';
+    const FALLEN_Y = STAGE_H + 120;
+    const isJar4 = jarId === 'jar4';
+    const isUltraJar = jarId === 'ultra';
+    const isTunedJar = isJar4 || isUltraJar;
+    const JAR_SPILL = JAR.spill || null;
+    const JAR_SPAWN = JAR.spawn || null;
+    const JAR_SPOON = JAR.spoon || null;
+    const JAR_FEED = JAR.feedZone || null;
+    const ESCAPE_TOP_Y = -10;
+    const SPAWN_NEAR_TOP_MARGIN = 50;
+    const OVERFLOW_DETECT_Y = JAR_SPILL?.overflowDetectY ?? (ESCAPE_TOP_Y + SPAWN_NEAR_TOP_MARGIN);
+    const SPAWN_LOWER_BONUS_Y = isUltraJar ? 14 : 20;
+    const SETTLE_MIN_Y = isUltraJar ? JAR.wallTopY + 28 : JAR.wallTopY + 72;
+    const NECK_NUDGE_Y = isUltraJar ? JAR.wallTopY + 20 : JAR.wallTopY + 48;
+    const SPILL_FLOOR_Y = JAR.floorY + 16;
+    const SETTLE_IDLE_MS_INSIDE = 12000;
+    const SETTLE_IDLE_MS_SPILL = 15000;
+
+    let total = 0;
+    let giftCount = 0;
+    let heliBusy = false;
+    const giftDeliveryQueue = [];
+    const heliEl = document.getElementById('helicopter');
+    const HELI_LAYOUT = {
+      width: 86,
+      y: 38,
+      enterFrom: -140,
+      exitTo: STAGE_W + 140,
+      centerX: STAGE_CENTER_X - 43,
+      baseEnterMs: 1350,
+      baseHoverMs: 320,
+      baseExitMs: 1250,
+    };
+    const imageCache = new Map();
+    const MAX_DYNAMIC_GIFTS = 35;
+    const GIFT_LABELS = ['gift', 'gift-static'];
+    const TEST_GIFT_SIZES = { g: 1, h: 20, j: 100 };
+
+    function initPhysics() {
+      if (typeof Matter === 'undefined') {
+        console.error('Matter.js โหลดไม่สำเร็จ');
+        return;
+      }
+
+      const {
+        Engine, Render, Runner, World, Bodies, Body, Composite, Events
+      } = Matter;
+
+      const engine = Engine.create({
+        enableSleeping: true,
+        positionIterations: isTunedJar ? 14 : 10,
+        velocityIterations: isTunedJar ? 10 : 8
+      });
+      engine.gravity.y = isUltraJar ? 1.18 : (isJar4 ? 1.15 : 1.22);
+
+      const render = Render.create({
+        element: document.getElementById('physics-layer'),
+        engine,
+        options: {
+          width: STAGE_W,
+          height: STAGE_H,
+          wireframes: false,
+          background: 'transparent',
+          pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
+        }
+      });
+
+      function wall(x, y, w, h, angle = 0) {
+        return Bodies.rectangle(x, y, w, h, {
+          isStatic: true,
+          angle,
+          friction: 0.55,
+          restitution: 0.02,
+          render: isDebug
+            ? { visible: true, fillStyle: 'rgba(255, 48, 48, 0.32)', strokeStyle: '#ff4444', lineWidth: 1 }
+            : { visible: false }
+        });
+      }
+
+      function setJarWallFriction(...walls) {
+        walls.forEach((segment) => {
+          segment.friction = 0.28;
+        });
+      }
+
+      function buildFloorCornerWalls(leftX, rightX) {
+        const floorLeftX = JAR.centerX - JAR.floorWidth / 2;
+        const floorRightX = JAR.centerX + JAR.floorWidth / 2;
+        const bodySpan = rightX - leftX;
+        if (JAR.floorWidth >= bodySpan - 4) return [];
+
+        const sideGap = (bodySpan - JAR.floorWidth) / 2;
+        const taperHeight = Math.round(Math.min(58, Math.max(34, sideGap * 0.75)));
+        const cornerAngle = sideGap > 42 ? 0.82 : sideGap > 30 ? 0.7 : 0.58;
+        const corners = [];
+        const upperY = JAR.floorY - taperHeight * 0.5;
+
+        corners.push(
+          wall((leftX + floorLeftX) / 2, upperY, 14, taperHeight, cornerAngle),
+          wall((rightX + floorRightX) / 2, upperY, 14, taperHeight, -cornerAngle)
+        );
+
+        if (sideGap > 38) {
+          const lowerH = Math.round(taperHeight * 0.58);
+          const lowerY = JAR.floorY - lowerH * 0.42;
+          const steepAngle = cornerAngle + 0.14;
+          corners.push(
+            wall((leftX + floorLeftX) / 2 + 5, lowerY, 12, lowerH, steepAngle),
+            wall((rightX + floorRightX) / 2 - 5, lowerY, 12, lowerH, -steepAngle)
+          );
+        }
+
+        setJarWallFriction(...corners);
+        return corners;
+      }
+
+      function buildBulbousJarWalls() {
+        const upperLeft = JAR.upperInnerLeft;
+        const upperRight = JAR.upperInnerRight;
+        const lowerLeft = JAR.innerLeft;
+        const lowerRight = JAR.innerRight;
+        const splitY = JAR.bulgeSplitY;
+
+        const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 18);
+        const bottomLeft = wall(lowerLeft + 6, JAR.lowerWallCenterY, 14, JAR.lowerWallHeight);
+        const bottomRight = wall(lowerRight - 6, JAR.lowerWallCenterY, 14, JAR.lowerWallHeight);
+        const topLeft = wall(upperLeft, JAR.upperWallCenterY, 14, JAR.upperWallHeight);
+        const topRight = wall(upperRight, JAR.upperWallCenterY, 14, JAR.upperWallHeight);
+
+        const shoulderLeft = wall(
+          (upperLeft + lowerLeft) / 2 - 4,
+          splitY,
+          12,
+          40,
+          0.48
+        );
+        const shoulderRight = wall(
+          (upperRight + lowerRight) / 2 + 4,
+          splitY,
+          12,
+          40,
+          -0.48
+        );
+
+        const flareLeft = wall(upperLeft + 14, JAR.wallTopY + 34, 10, 36, 0.28);
+        const flareRight = wall(upperRight - 14, JAR.wallTopY + 34, 10, 36, -0.28);
+        const rimLeft = wall(upperLeft - 2, JAR.wallTopY + 10, 50, 9, -0.5);
+        const rimRight = wall(upperRight + 2, JAR.wallTopY + 10, 50, 9, 0.5);
+        const floorCorners = buildFloorCornerWalls(lowerLeft, lowerRight);
+
+        setJarWallFriction(
+          bottomLeft, bottomRight, topLeft, topRight,
+          shoulderLeft, shoulderRight, flareLeft, flareRight, rimLeft, rimRight
+        );
+        return [
+          floor, bottomLeft, bottomRight, topLeft, topRight,
+          shoulderLeft, shoulderRight, flareLeft, flareRight, rimLeft, rimRight,
+          ...floorCorners
+        ];
+      }
+
+      function buildJar4BulbousWalls() {
+        const s = JAR.segments;
+        const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 18);
+
+        const mouthTopY = s.mouthTopY ?? s.neckTopY - 18;
+        const mouthLeftX = s.mouthLeft ?? s.neckLeft;
+        const mouthRightX = s.mouthRight ?? s.neckRight;
+        const mouthH = s.neckTopY - mouthTopY + 10;
+        const mouthCY = (mouthTopY + s.neckTopY) / 2;
+        const mouthLeftWall = wall(mouthLeftX + 7, mouthCY, 14, mouthH);
+        const mouthRightWall = wall(mouthRightX - 7, mouthCY, 14, mouthH);
+
+        const neckH = s.bulgeTopY - s.neckTopY + 12;
+        const neckCY = (s.neckTopY + s.bulgeTopY) / 2;
+        const neckLeft = wall(s.neckLeft + 7, neckCY, 14, neckH);
+        const neckRight = wall(s.neckRight - 7, neckCY, 14, neckH);
+
+        const bulgeMidY = s.bulgeMidY ?? (s.bulgeTopY + s.bulgeBottomY) / 2;
+        const midLeft = s.bulgeMidLeft ?? s.bulgeLeft;
+        const midRight = s.bulgeMidRight ?? s.bulgeRight;
+        const botLeft = s.bulgeBotLeft ?? s.bulgeLeft;
+        const botRight = s.bulgeBotRight ?? s.bulgeRight;
+
+        const topBulgeH = bulgeMidY - s.bulgeTopY;
+        const topBulgeCY = (s.bulgeTopY + bulgeMidY) / 2;
+        const topBulgeLeft = wall((s.bulgeLeft + midLeft) / 2 + 7, topBulgeCY, 14, topBulgeH);
+        const topBulgeRight = wall((s.bulgeRight + midRight) / 2 - 7, topBulgeCY, 14, topBulgeH);
+
+        const midBulgeH = s.bulgeBottomY - s.bulgeTopY;
+        const midBulgeCY = (s.bulgeTopY + s.bulgeBottomY) / 2;
+        const midBulgeLeft = wall(midLeft + 7, midBulgeCY, 14, midBulgeH);
+        const midBulgeRight = wall(midRight - 7, midBulgeCY, 14, midBulgeH);
+
+        const botBulgeH = s.bulgeBottomY - bulgeMidY;
+        const botBulgeCY = (bulgeMidY + s.bulgeBottomY) / 2;
+        const botBulgeLeft = wall((midLeft + botLeft) / 2 + 7, botBulgeCY, 14, botBulgeH);
+        const botBulgeRight = wall((midRight + botRight) / 2 - 7, botBulgeCY, 14, botBulgeH);
+
+        const taperH = s.taperBottomY - s.bulgeBottomY + 10;
+        const taperCY = (s.bulgeBottomY + s.taperBottomY) / 2;
+        const taperLeft = wall(s.taperLeft + 7, taperCY, 14, taperH, 0.32);
+        const taperRight = wall(s.taperRight - 7, taperCY, 14, taperH, -0.32);
+
+        const bottomH = JAR.floorY - s.taperBottomY + 14;
+        const bottomCY = (s.taperBottomY + JAR.floorY) / 2;
+        const bottomLeft = wall(s.floorLeft + 7, bottomCY, 14, bottomH, 0.52);
+        const bottomRight = wall(s.floorRight - 7, bottomCY, 14, bottomH, -0.52);
+
+        const cornerH = 48;
+        const cornerCY = s.taperBottomY + 2;
+        const leftCorner = wall((s.taperLeft + s.floorLeft) / 2 + 2, cornerCY, 14, cornerH, 0.78);
+        const rightCorner = wall((s.taperRight + s.floorRight) / 2 - 2, cornerCY, 14, cornerH, -0.78);
+
+        const lowerCornerH = 34;
+        const lowerCornerCY = JAR.floorY - 14;
+        const leftLowerCorner = wall(s.floorLeft + 16, lowerCornerCY, 12, lowerCornerH, 1.05);
+        const rightLowerCorner = wall(s.floorRight - 16, lowerCornerCY, 12, lowerCornerH, -1.05);
+
+        const lipY = JAR.floorY + 1;
+        const lipLeft = wall(s.floorLeft + 18, lipY, 32, 8, 0.82);
+        const lipRight = wall(s.floorRight - 18, lipY, 32, 8, -0.82);
+
+        floor.friction = 0.72;
+        floor.restitution = 0;
+        [bottomLeft, bottomRight, leftCorner, rightCorner, leftLowerCorner, rightLowerCorner, lipLeft, lipRight]
+          .forEach((segment) => {
+            segment.friction = 0.62;
+            segment.restitution = 0;
+          });
+
+        setJarWallFriction(
+          mouthLeftWall, mouthRightWall, neckLeft, neckRight,
+          topBulgeLeft, topBulgeRight, midBulgeLeft, midBulgeRight, botBulgeLeft, botBulgeRight,
+          taperLeft, taperRight
+        );
+        return [
+          floor, mouthLeftWall, mouthRightWall, neckLeft, neckRight,
+          topBulgeLeft, topBulgeRight, midBulgeLeft, midBulgeRight, botBulgeLeft, botBulgeRight,
+          taperLeft, taperRight, bottomLeft, bottomRight,
+          leftCorner, rightCorner, leftLowerCorner, rightLowerCorner, lipLeft, lipRight,
+        ];
+      }
+
+      function buildChuteWall(topX, topY, botX, botY, thickness = 8) {
+        const len = Math.hypot(botX - topX, botY - topY);
+        const angle = Math.atan2(botY - topY, botX - topX) - Math.PI / 2;
+        const cx = (topX + botX) / 2;
+        const cy = (topY + botY) / 2;
+        return wall(cx, cy, thickness, len, angle);
+      }
+
+      function buildUltraWalls() {
+        const s = JAR.segments;
+        const sp = JAR_SPOON;
+
+        const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 14);
+        floor.friction = 0.42;
+        floor.restitution = 0;
+
+        const bodyH = JAR.floorY - s.bodyTopY;
+        const bodyCY = (s.bodyTopY + JAR.floorY) / 2;
+        const jarLeft = wall(s.bodyLeft + 4, bodyCY, 10, bodyH);
+        const jarRight = wall(s.bodyRight - 4, bodyCY, 10, bodyH);
+
+        const taperH = JAR.floorY - s.taperBottomY + 10;
+        const taperCY = (s.taperBottomY + JAR.floorY) / 2;
+        const taperLeft = wall(s.taperLeft + 4, taperCY, 10, taperH, 0.35);
+        const taperRight = wall(s.taperRight - 4, taperCY, 10, taperH, -0.35);
+
+        const spoonRamp = wall(sp.rampCenterX, sp.rampCenterY, sp.rampLength, sp.rampWidth, sp.rampAngle);
+        spoonRamp.friction = 0.14;
+        spoonRamp.restitution = 0.02;
+
+        const spoonGuard = wall(sp.guardCenterX, sp.guardCenterY, sp.guardLength, sp.guardWidth, sp.guardAngle);
+        spoonGuard.friction = 0.1;
+
+        [jarLeft, jarRight, taperLeft, taperRight]
+          .forEach((segment) => { segment.friction = 0.14; });
+
+        return [floor, jarLeft, jarRight, taperLeft, taperRight, spoonRamp, spoonGuard];
+      }
+
+      function buildJarWalls() {
+        if (JAR.wallStyle === 'ultra') return buildUltraWalls();
+        if (JAR.wallStyle === 'bulbous') {
+          if (isJar4 && JAR.segments) return buildJar4BulbousWalls();
+          return buildBulbousJarWalls();
+        }
+
+        const floor = wall(JAR.centerX, JAR.floorY, JAR.floorWidth, 18);
+        const left = wall(JAR.innerLeft, JAR.wallCenterY, 16, JAR.wallHeight);
+        const right = wall(JAR.innerRight, JAR.wallCenterY, 16, JAR.wallHeight);
+        const neckLeft = wall(
+          JAR.innerLeft + JAR.neckInset + 2,
+          JAR.wallTopY + 50,
+          10, 38, -0.18
+        );
+        const neckRight = wall(
+          JAR.innerRight - JAR.neckInset - 2,
+          JAR.wallTopY + 50,
+          10, 38, 0.18
+        );
+        const rimLeft = wall(JAR.innerLeft - 4, JAR.wallTopY + 18, 44, 9, -0.72);
+        const rimRight = wall(JAR.innerRight + 4, JAR.wallTopY + 18, 44, 9, 0.72);
+        const floorCorners = buildFloorCornerWalls(JAR.innerLeft, JAR.innerRight);
+        setJarWallFriction(neckLeft, neckRight, rimLeft, rimRight);
+        return [floor, left, right, neckLeft, neckRight, rimLeft, rimRight, ...floorCorners];
+      }
+
+      function buildSpillSurfaces() {
+        const spillY = JAR.floorY + 16;
+        const spillFloor = wall(STAGE_W / 2, spillY, STAGE_W, 14);
+        spillFloor.friction = 0.38;
+
+        const frameWallW = 10;
+        const frameWallX = frameWallW / 2;
+        const leftBound = wall(frameWallX, STAGE_H / 2, frameWallW, STAGE_H);
+        const rightBound = wall(STAGE_W - frameWallX, STAGE_H / 2, frameWallW, STAGE_H);
+        leftBound.friction = 0.18;
+        rightBound.friction = 0.18;
+
+        return [spillFloor, leftBound, rightBound];
+      }
+
+      World.add(engine.world, [...buildJarWalls(), ...buildSpillSurfaces()]);
+
+      function getGiftBodies() {
+        return Composite.allBodies(engine.world).filter((b) => GIFT_LABELS.includes(b.label));
+      }
+
+      function giftRadius(diamonds) {
+        return giftPhysicsRadius(diamonds, GIFT_SIZE_MULTIPLIER);
+      }
+
+      function lerpSegment(y, y0, y1, x0, x1) {
+        const span = Math.max(1, y1 - y0);
+        const t = Math.min(1, Math.max(0, (y - y0) / span));
+        return x0 + (x1 - x0) * t;
+      }
+
+      function getJar4InnerXAtY(y) {
+        const s = JAR.segments;
+        const bulgeMidY = s.bulgeMidY ?? (s.bulgeTopY + s.bulgeBottomY) / 2;
+        const midLeft = s.bulgeMidLeft ?? s.bulgeLeft;
+        const midRight = s.bulgeMidRight ?? s.bulgeRight;
+        const botLeft = s.bulgeBotLeft ?? s.bulgeLeft;
+        const botRight = s.bulgeBotRight ?? s.bulgeRight;
+        const mouthTopY = s.mouthTopY ?? s.neckTopY - 18;
+        const mouthLeft = s.mouthLeft ?? s.neckLeft;
+        const mouthRight = s.mouthRight ?? s.neckRight;
+
+        if (y <= mouthTopY) {
+          return { left: mouthLeft, right: mouthRight };
+        }
+        if (y <= s.neckTopY) {
+          return {
+            left: lerpSegment(y, mouthTopY, s.neckTopY, mouthLeft, s.neckLeft),
+            right: lerpSegment(y, mouthTopY, s.neckTopY, mouthRight, s.neckRight),
+          };
+        }
+        if (y <= s.bulgeTopY) {
+          return { left: s.neckLeft, right: s.neckRight };
+        }
+        if (y <= bulgeMidY) {
+          return {
+            left: lerpSegment(y, s.bulgeTopY, bulgeMidY, s.bulgeLeft, midLeft),
+            right: lerpSegment(y, s.bulgeTopY, bulgeMidY, s.bulgeRight, midRight),
+          };
+        }
+        if (y <= s.bulgeBottomY) {
+          return {
+            left: lerpSegment(y, bulgeMidY, s.bulgeBottomY, midLeft, botLeft),
+            right: lerpSegment(y, bulgeMidY, s.bulgeBottomY, midRight, botRight),
+          };
+        }
+        if (y <= s.taperBottomY) {
+          return {
+            left: lerpSegment(y, s.bulgeBottomY, s.taperBottomY, botLeft, s.taperLeft),
+            right: lerpSegment(y, s.bulgeBottomY, s.taperBottomY, botRight, s.taperRight),
+          };
+        }
+        const span = Math.max(1, JAR.floorY - s.taperBottomY);
+        const t = Math.min(1, (y - s.taperBottomY) / span);
+        return {
+          left: s.taperLeft + (s.floorLeft - s.taperLeft) * t,
+          right: s.taperRight + (s.floorRight - s.taperRight) * t,
+        };
+      }
+
+      function getUltraInnerXAtY(y) {
+        const s = JAR.segments;
+        if (y <= s.rimTopY) {
+          return { left: s.rimLeft, right: s.rimRight };
+        }
+        if (y <= s.bodyTopY) {
+          return {
+            left: lerpSegment(y, s.rimTopY, s.bodyTopY, s.rimLeft, s.bodyLeft),
+            right: lerpSegment(y, s.rimTopY, s.bodyTopY, s.rimRight, s.bodyRight),
+          };
+        }
+        if (y <= s.taperBottomY) {
+          return { left: s.bodyLeft, right: s.bodyRight };
+        }
+        const span = Math.max(1, JAR.floorY - s.taperBottomY);
+        const t = Math.min(1, (y - s.taperBottomY) / span);
+        return {
+          left: s.taperLeft + (s.floorLeft - s.taperLeft) * t,
+          right: s.taperRight + (s.floorRight - s.taperRight) * t,
+        };
+      }
+
+      function getJarInnerXAtY(y) {
+        if (isUltraJar && JAR.segments) {
+          return getUltraInnerXAtY(y);
+        }
+        if (isJar4 && JAR.segments) {
+          return getJar4InnerXAtY(y);
+        }
+
+        if (JAR.wallStyle !== 'bulbous' || JAR.upperInnerLeft == null) {
+          return { left: JAR.innerLeft, right: JAR.innerRight };
+        }
+
+        if (y <= JAR.bulgeSplitY) {
+          return { left: JAR.upperInnerLeft, right: JAR.upperInnerRight };
+        }
+
+        const t = Math.min(1, (y - JAR.bulgeSplitY) / (JAR.floorY - JAR.bulgeSplitY));
+        return {
+          left: JAR.upperInnerLeft + (JAR.innerLeft - JAR.upperInnerLeft) * t,
+          right: JAR.upperInnerRight + (JAR.innerRight - JAR.upperInnerRight) * t,
+        };
+      }
+
+      function isOutsideJarX(x, y = JAR.floorY) {
+        const margin = 10;
+        const bounds = getJarInnerXAtY(y);
+        return x < bounds.left - margin || x > bounds.right + margin;
+      }
+
+      function isJar4BottomZone(y) {
+        const s = JAR.segments;
+        return y >= (s?.taperBottomY ?? JAR.floorY - 40) - 12;
+      }
+
+      function isNearJar4Floor(body) {
+        const radius = body.circleRadius || 12;
+        return body.position.y + radius >= JAR.floorY - 20;
+      }
+
+      function isJar4InsideX(body, y = body.position.y) {
+        const radius = body.circleRadius || 12;
+        const bounds = getJarInnerXAtY(Math.min(y, JAR.floorY));
+        return body.position.x >= bounds.left + radius - 4
+          && body.position.x <= bounds.right - radius + 4;
+      }
+
+      function isJar4AccidentalBottomLeak(body) {
+        if (!isJar4BottomZone(body.position.y)) return false;
+        if (isOnSpillFloor(body) || isSpilledGift(body)) return false;
+
+        const radius = body.circleRadius || 12;
+        if (!isJar4InsideX(body)) return false;
+
+        return body.position.y + radius > JAR.floorY - 1;
+      }
+
+      function isUltraBottomZone(y) {
+        const s = JAR.segments;
+        return y >= (s?.taperBottomY ?? JAR.floorY - 30) - 10;
+      }
+
+      function isUltraInsideX(body, y = body.position.y) {
+        const radius = body.circleRadius || 12;
+        const bounds = getJarInnerXAtY(Math.min(y, JAR.floorY));
+        return body.position.x >= bounds.left + radius - 3
+          && body.position.x <= bounds.right - radius + 3;
+      }
+
+      function isUltraInFeedZone(x, y) {
+        if (JAR_FEED) {
+          return x >= JAR_FEED.minX && x <= JAR_FEED.maxX
+            && y >= JAR_FEED.minY && y <= JAR_FEED.maxY;
+        }
+        if (!JAR_SPOON) return false;
+        const sp = JAR_SPOON;
+        return y >= sp.guardCenterY - 30 && y <= JAR.segments.bodyTopY + 16
+          && x >= sp.tipX - 36 && x <= JAR.segments.rimRight + 88;
+      }
+
+      function isUltraOnSpoon(body) {
+        if (!JAR_SPOON) return false;
+        const y = body.position.y;
+        const x = body.position.x;
+        const sp = JAR_SPOON;
+        return y > sp.guardCenterY - 28 && y < sp.tipY + 18 && x > sp.tipX - 32;
+      }
+
+      function isUltraSpawnDrop(body) {
+        if (!isUltraJar || !JAR_SPAWN) return false;
+        const dropTop = JAR_SPAWN.y - (JAR_SPAWN.lift ?? 0) - (JAR_SPAWN.jitter ?? 0) - 8;
+        const age = Date.now() - (body.spawnTime || 0);
+        return body.position.y < dropTop + 42 && age < 1500;
+      }
+
+      function isUltraAtMouth(body) {
+        if (!JAR_SPOON || !JAR.segments) return false;
+        const sp = JAR_SPOON;
+        const y = body.position.y;
+        const x = body.position.x;
+        return y >= sp.tipY - 20 && y < JAR.segments.bodyTopY + 20
+          && x >= JAR.segments.rimLeft - 14 && x <= JAR.segments.rimRight + 8;
+      }
+
+      function isSpilledOutsideJar(x, y = JAR.floorY) {
+        if (isUltraJar && JAR.segments) {
+          if (isUltraInFeedZone(x, y)) return false;
+
+          if (isUltraBottomZone(y)) {
+            const margin = 3;
+            const bounds = getJarInnerXAtY(Math.min(y, JAR.floorY));
+            return x < bounds.left - margin || x > bounds.right + margin;
+          }
+
+          const margin = 5;
+          const bounds = getJarInnerXAtY(y);
+          if (x < bounds.left - margin || x > bounds.right + margin) return true;
+
+          const topSpillY = JAR_SPILL?.topSpillY ?? JAR.segments.rimTopY + 4;
+          if (y < topSpillY) {
+            const rimL = JAR.segments.rimLeft - (JAR_SPILL?.mouthSpillMargin ?? 2);
+            const rimR = JAR.segments.rimRight + (JAR_SPILL?.mouthSpillMargin ?? 2);
+            if (x < rimL || x > rimR) return true;
+          }
+          return false;
+        }
+
+        if (isJar4 && JAR.segments) {
+          // ของที่หลุดก้นโถไม่ใช่ spill ปกติ — ให้ recover แยกต่างหาก
+          if (isJar4BottomZone(y)) {
+            const margin = 4;
+            const bounds = getJarInnerXAtY(Math.min(y, JAR.floorY));
+            return x < bounds.left - margin || x > bounds.right + margin;
+          }
+
+          const margin = 6;
+          const bounds = getJarInnerXAtY(y);
+          if (x < bounds.left - margin || x > bounds.right + margin) return true;
+
+          const topSpillY = JAR_SPILL?.topSpillY ?? JAR.segments.neckTopY + 8;
+          if (y < topSpillY) {
+            const neckL = JAR.segments.neckLeft - (JAR_SPILL?.mouthSpillMargin ?? 2);
+            const neckR = JAR.segments.neckRight + (JAR_SPILL?.mouthSpillMargin ?? 2);
+            if (x < neckL || x > neckR) return true;
+            if (y < JAR.mouthY - 4) return true;
+          }
+          return false;
+        }
+
+        const margin = 8;
+        return x < JAR.innerLeft - margin || x > JAR.innerRight + margin;
+      }
+
+      function isOnSpillFloor(body) {
+        const radius = body.circleRadius || 12;
+        return body.position.y + radius >= SPILL_FLOOR_Y - 14;
+      }
+
+      function isSpilledGift(body) {
+        return isSpilledOutsideJar(body.position.x, body.position.y);
+      }
+
+      function getFreezeIdleMs(body) {
+        if (isTunedJar && (isNearJar4Floor(body) || (isUltraJar && body.position.y + (body.circleRadius || 12) >= JAR.floorY - 18))
+          && !isSpilledGift(body)) {
+          return 2800;
+        }
+        return isSpilledGift(body) ? SETTLE_IDLE_MS_SPILL : SETTLE_IDLE_MS_INSIDE;
+      }
+
+      function canSettleGift(body) {
+        if (!body) return false;
+        if (isSpilledGift(body)) {
+          return isOnSpillFloor(body);
+        }
+        if (isTunedJar && (isNearJar4Floor(body) || (isUltraJar && body.position.y + (body.circleRadius || 12) >= JAR.floorY - 18))) {
+          return body.speed < 2.4;
+        }
+        return body.position.y >= SETTLE_MIN_Y;
+      }
+
+      function isReadyToFreeze(body) {
+        if (!canSettleGift(body)) return false;
+        const age = Date.now() - (body.spawnTime || 0);
+        return age >= getFreezeIdleMs(body);
+      }
+
+      function freezeGift(body) {
+        if (!body || body.isStatic || body.frozen) return;
+        if (!canSettleGift(body)) return;
+        Body.setStatic(body, true);
+        Body.setVelocity(body, { x: 0, y: 0 });
+        Body.setAngularVelocity(body, 0);
+        body.label = 'gift-static';
+        body.frozen = true;
+      }
+
+      function thawNeckGift(body) {
+        if (!body || !body.isStatic) return;
+        Body.setStatic(body, false);
+        body.label = 'gift';
+        body.frozen = false;
+        body.sleepThreshold = Infinity;
+        Body.setVelocity(body, {
+          x: (Math.random() - 0.5) * 0.8,
+          y: 2.4 + Math.random() * 1.2
+        });
+        body.lastNudgeTime = Date.now();
+      }
+
+      function canForceFreeze(body) {
+        return isReadyToFreeze(body);
+      }
+
+      function enforceDynamicLimit() {
+        const dynamic = getGiftBodies().filter((b) => b.label === 'gift');
+        if (dynamic.length <= MAX_DYNAMIC_GIFTS) return;
+
+        let excess = dynamic.length - MAX_DYNAMIC_GIFTS;
+        const settled = dynamic
+          .filter(canForceFreeze)
+          .sort((a, b) => {
+            const aSpill = isSpilledGift(a);
+            const bSpill = isSpilledGift(b);
+            if (aSpill !== bSpill) return aSpill ? 1 : -1;
+            return b.position.y - a.position.y;
+          });
+
+        for (let i = 0; i < settled.length && excess > 0; i++) {
+          freezeGift(settled[i]);
+          excess--;
+        }
+
+        if (excess <= 0) return;
+
+        dynamic
+          .filter((b) => b.label === 'gift' && b.position.y < SETTLE_MIN_Y)
+          .sort((a, b) => a.position.y - b.position.y)
+          .slice(0, excess)
+          .forEach((body) => {
+            Body.setVelocity(body, {
+              x: (Math.random() - 0.5) * 1.6,
+              y: 4.2 + Math.random() * 2
+            });
+            body.lastNudgeTime = Date.now();
+          });
+      }
+
+      function updateRenderQuality() {
+        const count = getGiftBodies().length;
+        render.options.pixelRatio = count > 45
+          ? 1
+          : Math.min(window.devicePixelRatio || 1, 2);
+      }
+
+      function loadGiftImage(url) {
+        const src = url || FALLBACK_TEXTURE;
+        if (imageCache.has(src)) return imageCache.get(src);
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = src;
+        imageCache.set(src, img);
+
+        img.onerror = () => {
+          if (src !== FALLBACK_TEXTURE) {
+            imageCache.set(src, loadGiftImage(FALLBACK_TEXTURE));
+          }
+        };
+
+        return img;
+      }
+
+      function getSpawnYBonus() {
+        const gifts = getGiftBodies();
+        if (!gifts.length) return 0;
+
+        let highestTop = Infinity;
+        gifts.forEach((body) => {
+          const top = body.position.y - (body.circleRadius || 12);
+          if (top < highestTop) highestTop = top;
+        });
+
+        if (highestTop <= OVERFLOW_DETECT_Y) {
+          return SPAWN_LOWER_BONUS_Y;
+        }
+        return 0;
+      }
+
+      function createGift(data) {
+        const diamonds = Number(data.diamonds) || 1;
+        const radius = giftRadius(diamonds);
+        const spawnHalfWidth = JAR_SPAWN?.halfWidth ?? JAR.mouthHalfWidth;
+        const spawnSpread = JAR_SPAWN?.spread ?? 1.6;
+        const spawnCenterX = JAR_SPAWN?.centerX ?? JAR.centerX;
+        const x = spawnCenterX + (Math.random() - 0.5) * spawnHalfWidth * spawnSpread;
+        const spawnY = JAR_SPAWN?.y ?? JAR.mouthY;
+        const spawnLift = JAR_SPAWN?.lift ?? spawnY * 0.1;
+        const spawnJitter = JAR_SPAWN?.jitter ?? 14;
+        const y = spawnY - spawnLift - Math.random() * spawnJitter
+          - Math.max(0, radius - 12) + getSpawnYBonus();
+
+        const tunedGift = isTunedJar;
+        const gift = Bodies.circle(x, y, radius, {
+          restitution: isUltraJar ? 0.03 : (tunedGift ? 0.05 : 0.2),
+          friction: isUltraJar ? 0.18 : (tunedGift ? 0.42 : 0.3),
+          frictionStatic: isUltraJar ? 0.22 : (tunedGift ? 0.5 : 0.36),
+          frictionAir: isUltraJar ? 0.004 : (tunedGift ? 0.012 : 0.009),
+          density: 0.0009 * (14 / radius),
+          slop: isUltraJar ? 0.008 : (tunedGift ? 0.01 : 0.02),
+          render: {
+            fillStyle: 'transparent',
+            strokeStyle: 'transparent',
+            lineWidth: 0
+          }
+        });
+
+        gift.label = 'gift';
+        gift.giftImage = loadGiftImage(data.giftPictureUrl);
+        gift.spawnTime = Date.now();
+        gift.lastMoveTime = gift.spawnTime;
+        gift.sleepThreshold = Infinity;
+
+        World.add(engine.world, gift);
+        const ultraSpawn = isUltraJar && JAR_SPAWN;
+        Body.setAngularVelocity(gift, (Math.random() - 0.5) * (ultraSpawn ? 0.03 : (tunedGift ? 0.08 : 0.16)));
+        if (ultraSpawn) {
+          const vx = JAR_SPAWN.velocityX ?? 0.03;
+          const vy = JAR_SPAWN.velocityY ?? 0;
+          Body.setVelocity(gift, {
+            x: (Math.random() - 0.5) * vx,
+            y: vy,
+          });
+        } else {
+          Body.setVelocity(gift, {
+            x: (Math.random() - 0.5) * (tunedGift ? 0.18 : 0.55),
+            y: tunedGift ? 1.2 + Math.random() * 0.5 : 1.8 + Math.random() * 1.2
+          });
+        }
+
+        giftCount++;
+        enforceDynamicLimit();
+      }
+
+      function heliDuration(baseMs) {
+        return Math.max(180, Math.round(baseMs / HELI_SPEED_MULT));
+      }
+
+      function runHelicopterDrop(data, onDone) {
+        if (!heliEl) {
+          createGift(data);
+          onDone();
+          return;
+        }
+
+        heliEl.style.display = 'block';
+        heliEl.style.transition = 'none';
+        heliEl.style.left = `${HELI_LAYOUT.enterFrom}px`;
+        heliEl.style.top = `${HELI_LAYOUT.y}px`;
+
+        requestAnimationFrame(() => {
+          heliEl.style.transition = `left ${heliDuration(HELI_LAYOUT.baseEnterMs)}ms ease-in-out`;
+          heliEl.style.left = `${HELI_LAYOUT.centerX}px`;
+        });
+
+        setTimeout(() => {
+          createGift(data);
+          setTimeout(() => {
+            heliEl.style.transition = `left ${heliDuration(HELI_LAYOUT.baseExitMs)}ms ease-in-out`;
+            heliEl.style.left = `${HELI_LAYOUT.exitTo}px`;
+            setTimeout(() => {
+              heliEl.style.display = 'none';
+              onDone();
+            }, heliDuration(HELI_LAYOUT.baseExitMs));
+          }, heliDuration(HELI_LAYOUT.baseHoverMs));
+        }, heliDuration(HELI_LAYOUT.baseEnterMs));
+      }
+
+      function drainGiftDeliveryQueue() {
+        if (heliBusy || !giftDeliveryQueue.length) return;
+        heliBusy = true;
+        const data = giftDeliveryQueue.shift();
+        runHelicopterDrop(data, () => {
+          heliBusy = false;
+          drainGiftDeliveryQueue();
+        });
+      }
+
+      function deliverGift(data) {
+        giftDeliveryQueue.push(data);
+        drainGiftDeliveryQueue();
+      }
+
+      function removeEscapedGifts() {
+        const gifts = getGiftBodies();
+        const escaped = gifts.filter((b) => {
+          const radius = b.circleRadius || 12;
+          return b.position.y > FALLEN_Y || b.position.y - radius < ESCAPE_TOP_Y;
+        });
+        if (escaped.length) World.remove(engine.world, escaped);
+      }
+
+      function settleIdleGifts() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isReadyToFreeze(body)) {
+            freezeGift(body);
+          }
+        });
+      }
+
+      function shouldThawFrozenGift(body) {
+        if (body.position.y < SETTLE_MIN_Y) return true;
+        if (isSpilledGift(body) && !isOnSpillFloor(body)) return true;
+        if (isTunedJar && body.position.y < (JAR_SPILL?.topSpillY ?? 72) && !isOnSpillFloor(body)) {
+          return true;
+        }
+        return false;
+      }
+
+      function isUltraOverflowing() {
+        const gifts = getGiftBodies();
+        if (!gifts.length) return false;
+        let highestTop = Infinity;
+        gifts.forEach((body) => {
+          const top = body.position.y - (body.circleRadius || 12);
+          if (top < highestTop) highestTop = top;
+        });
+        return highestTop <= OVERFLOW_DETECT_Y;
+      }
+
+      function recoverUltraSideLeaks() {
+        const s = JAR.segments;
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isOnSpillFloor(body) || isSpilledGift(body)) return;
+          if (isUltraOnSpoon(body) || isUltraInFeedZone(body.position.x, body.position.y)) return;
+
+          const age = Date.now() - (body.spawnTime || 0);
+          if (age > 10000) return;
+
+          const y = body.position.y;
+          if (y < s.bodyTopY || y > s.taperBottomY + 20) return;
+
+          const radius = body.circleRadius || 12;
+          const bounds = getJarInnerXAtY(y);
+          const minX = bounds.left + radius - 1;
+          const maxX = bounds.right - radius + 1;
+
+          if (body.position.x < minX - 3) {
+            Body.setPosition(body, { x: minX, y: body.position.y });
+            Body.setVelocity(body, { x: Math.max(0.06, body.velocity.x * 0.1), y: body.velocity.y * 0.8 });
+            body.lastNudgeTime = Date.now();
+          } else if (body.position.x > maxX + 3) {
+            Body.setPosition(body, { x: maxX, y: body.position.y });
+            Body.setVelocity(body, { x: Math.min(-0.06, body.velocity.x * 0.1), y: body.velocity.y * 0.8 });
+            body.lastNudgeTime = Date.now();
+          }
+        });
+      }
+
+      function recoverUltraBottomLeaks() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isOnSpillFloor(body) || isSpilledGift(body)) return;
+          if (!isUltraBottomZone(body.position.y) || !isUltraInsideX(body)) return;
+
+          const radius = body.circleRadius || 12;
+          if (body.position.y + radius <= JAR.floorY - 1) return;
+
+          Body.setPosition(body, { x: body.position.x, y: JAR.floorY - radius - 1 });
+          Body.setVelocity(body, { x: body.velocity.x * 0.15, y: Math.min(body.velocity.y * 0.12, 0.15) });
+          body.lastNudgeTime = Date.now();
+        });
+      }
+
+      function stabilizeUltraBottomStack() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isSpilledGift(body) || isOnSpillFloor(body)) return;
+          if (!isUltraBottomZone(body.position.y) || !isUltraInsideX(body)) return;
+
+          const radius = body.circleRadius || 12;
+          const feetY = body.position.y + radius;
+
+          if (body.speed > 2.4) {
+            Body.setVelocity(body, { x: body.velocity.x * 0.72, y: body.velocity.y * 0.55 });
+            body.lastNudgeTime = Date.now();
+          }
+
+          if (feetY > JAR.floorY - 2 && body.speed < 1.1 && isReadyToFreeze(body)) {
+            Body.setPosition(body, { x: body.position.x, y: JAR.floorY - radius - 2 });
+            freezeGift(body);
+          }
+        });
+      }
+
+      function assistUltraFlow() {
+        const sp = JAR_SPOON;
+        const s = JAR.segments;
+        const topSpillY = JAR_SPILL?.topSpillY ?? s.rimTopY + 4;
+        const overflowing = isUltraOverflowing();
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isOnSpillFloor(body)) return;
+          if (isUltraSpawnDrop(body)) return;
+
+          const x = body.position.x;
+          const y = body.position.y;
+          const radius = body.circleRadius || 12;
+          const inFeed = isUltraInFeedZone(x, y);
+          const bounds = getJarInnerXAtY(y);
+          const nearSpoon = y >= sp.guardCenterY - 30;
+
+          if (isUltraOnSpoon(body) || (inFeed && nearSpoon && y < sp.tipY + 6)) {
+            const towardTipX = (sp.tipX - x) * 0.05;
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.95 + towardTipX,
+              y: Math.max(body.velocity.y, 0.9 + Math.random() * 0.3)
+            });
+            body.lastNudgeTime = Date.now();
+            return;
+          }
+
+          if (isUltraAtMouth(body)) {
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.78 + (JAR.centerX - x) * 0.05,
+              y: Math.max(body.velocity.y, 2.6 + Math.random() * 0.45)
+            });
+            body.lastNudgeTime = Date.now();
+            return;
+          }
+
+          const outsideX = x < bounds.left - 6 || x > bounds.right + 6;
+          const spilled = !inFeed && (outsideX || isSpilledGift(body));
+
+          if (spilled) {
+            const feetY = y + radius;
+            if (feetY >= SPILL_FLOOR_Y - 8) return;
+            if (body.speed > 0.6 && body.velocity.y > 1.1 && y < JAR.floorY) return;
+            const slideDir = x < JAR.centerX ? -1 : 1;
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.76 + slideDir * 0.38,
+              y: Math.max(body.velocity.y, 3.2 + Math.random() * 1.0)
+            });
+            body.lastNudgeTime = Date.now();
+            return;
+          }
+
+          if (y < topSpillY && overflowing && (x < bounds.left - radius || x > bounds.right + radius)) {
+            const exitDir = x < JAR.centerX ? -1 : 1;
+            Body.setVelocity(body, {
+              x: body.velocity.x + exitDir * (0.95 + Math.random() * 0.3),
+              y: Math.max(body.velocity.y, 2.0 + Math.random() * 0.55)
+            });
+            body.lastNudgeTime = Date.now();
+          }
+        });
+      }
+
+      function assistSpillFlow() {
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (!isSpilledGift(body) || isOnSpillFloor(body)) return;
+
+          const feetY = body.position.y + (body.circleRadius || 12);
+          if (feetY >= SPILL_FLOOR_Y - 6) return;
+          if (body.speed > 0.42 && body.velocity.y > 0.65) return;
+
+          const towardLeft = body.position.x < JAR.centerX;
+          Body.setVelocity(body, {
+            x: body.velocity.x + (towardLeft ? -0.5 : 0.5),
+            y: Math.max(body.velocity.y, 1.8 + Math.random() * 0.7)
+          });
+          body.lastNudgeTime = Date.now();
+        });
+      }
+
+      function recoverJar4BottomLeaks() {
+        const floorY = JAR.floorY;
+        const maxFeetY = floorY - 1;
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (!isJar4AccidentalBottomLeak(body)) return;
+
+          const radius = body.circleRadius || 12;
+          Body.setPosition(body, {
+            x: body.position.x,
+            y: maxFeetY - radius,
+          });
+          Body.setVelocity(body, {
+            x: body.velocity.x * 0.18,
+            y: Math.min(body.velocity.y * 0.15, 0.2),
+          });
+          body.lastNudgeTime = Date.now();
+        });
+      }
+
+      function stabilizeJar4BottomStack() {
+        const floorY = JAR.floorY;
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isSpilledGift(body) || isOnSpillFloor(body)) return;
+          if (!isJar4BottomZone(body.position.y)) return;
+          if (!isJar4InsideX(body)) return;
+
+          const radius = body.circleRadius || 12;
+          const feetY = body.position.y + radius;
+
+          if (body.speed > 2.2) {
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.52,
+              y: body.velocity.y * 0.38,
+            });
+            body.lastNudgeTime = Date.now();
+          }
+
+          if (feetY < floorY - 28) return;
+
+          if (Math.abs(body.velocity.x) > 1.4 && feetY > floorY - 16) {
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.45,
+              y: body.velocity.y,
+            });
+            body.lastNudgeTime = Date.now();
+          }
+
+          if (feetY > floorY - 3 && body.speed < 0.9 && isReadyToFreeze(body)) {
+            Body.setPosition(body, { x: body.position.x, y: floorY - radius - 2 });
+            freezeGift(body);
+          }
+        });
+      }
+
+      function isJar4Overflowing() {
+        const gifts = getGiftBodies();
+        if (!gifts.length) return false;
+
+        let highestTop = Infinity;
+        gifts.forEach((body) => {
+          const top = body.position.y - (body.circleRadius || 12);
+          if (top < highestTop) highestTop = top;
+        });
+        return highestTop <= OVERFLOW_DETECT_Y;
+      }
+
+      function recoverJar4SideLeaks() {
+        const s = JAR.segments;
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isOnSpillFloor(body) || isSpilledGift(body)) return;
+
+          const age = Date.now() - (body.spawnTime || 0);
+          if (age > 12000) return;
+
+          const y = body.position.y;
+          if (y < s.neckTopY || y > s.bulgeBottomY + 30) return;
+
+          const radius = body.circleRadius || 12;
+          const bounds = getJarInnerXAtY(y);
+          const minX = bounds.left + radius - 1;
+          const maxX = bounds.right - radius + 1;
+
+          if (body.position.x < minX - 4) {
+            Body.setPosition(body, { x: minX, y: body.position.y });
+            Body.setVelocity(body, {
+              x: Math.max(0.08, body.velocity.x * 0.12),
+              y: body.velocity.y * 0.82,
+            });
+            body.lastNudgeTime = Date.now();
+          } else if (body.position.x > maxX + 4) {
+            Body.setPosition(body, { x: maxX, y: body.position.y });
+            Body.setVelocity(body, {
+              x: Math.min(-0.08, body.velocity.x * 0.12),
+              y: body.velocity.y * 0.82,
+            });
+            body.lastNudgeTime = Date.now();
+          }
+        });
+      }
+
+      function assistJar4SpillFlow() {
+        const s = JAR.segments;
+        const topSpillY = JAR_SPILL?.topSpillY ?? s.neckTopY + 8;
+        const overflowing = isJar4Overflowing();
+        const neckL = s.neckLeft - (JAR_SPILL?.mouthSpillMargin ?? 2);
+        const neckR = s.neckRight + (JAR_SPILL?.mouthSpillMargin ?? 2);
+
+        getGiftBodies().forEach((body) => {
+          if (body.label !== 'gift' || body.isStatic) return;
+          if (isOnSpillFloor(body)) return;
+
+          const x = body.position.x;
+          const y = body.position.y;
+          const radius = body.circleRadius || 12;
+          const bounds = getJarInnerXAtY(y);
+          const outsideX = x < bounds.left - 8 || x > bounds.right + 8;
+          const outsideMouth = x < neckL - radius || x > neckR + radius;
+          const spilled = outsideX || isSpilledGift(body);
+
+          if (spilled) {
+            const feetY = y + radius;
+            if (feetY >= SPILL_FLOOR_Y - 8) return;
+            if (body.speed > 0.65 && body.velocity.y > 1.2 && y < JAR.floorY) return;
+
+            const slideDir = x < JAR.centerX ? -1 : 1;
+            Body.setVelocity(body, {
+              x: body.velocity.x * 0.78 + slideDir * 0.35,
+              y: Math.max(body.velocity.y, 3.4 + Math.random() * 1.2)
+            });
+            body.lastNudgeTime = Date.now();
+            return;
+          }
+
+          // ผลักออกปากโถเฉพาะตอนโถเต็มและของอยู่นอกคอโถแล้ว
+          if (y < topSpillY && overflowing && outsideMouth) {
+            const exitDir = x < JAR.centerX ? -1 : 1;
+            Body.setVelocity(body, {
+              x: body.velocity.x + exitDir * (1.1 + Math.random() * 0.35),
+              y: Math.max(body.velocity.y, 2.2 + Math.random() * 0.7)
+            });
+            body.lastNudgeTime = Date.now();
+            return;
+          }
+
+          const midLeft = s.bulgeMidLeft ?? s.bulgeLeft;
+          const midRight = s.bulgeMidRight ?? s.bulgeRight;
+          if (y < s.bulgeBottomY + 20 && (x < midLeft - radius - 2 || x > midRight + radius + 2)) {
+            Body.setVelocity(body, {
+              x: body.velocity.x,
+              y: Math.max(body.velocity.y, 2.6 + Math.random() * 0.8)
+            });
+            body.lastNudgeTime = Date.now();
+          }
+        });
+      }
+
+      function relieveNeckJam() {
+        const now = Date.now();
+
+        getGiftBodies().forEach((body) => {
+          if (body.isStatic && shouldThawFrozenGift(body)) {
+            thawNeckGift(body);
+            return;
+          }
+
+          if (body.label !== 'gift' || body.isStatic) return;
+
+          const lastNudge = body.lastNudgeTime || body.spawnTime || 0;
+          const stuckFor = now - lastNudge;
+
+          if (body.position.y < SETTLE_MIN_Y) {
+            const inNeck = body.position.y >= NECK_NUDGE_Y;
+            const ultraFeed = isUltraJar && isUltraInFeedZone(body.position.x, body.position.y);
+            if (body.speed < 0.28 && stuckFor > (inNeck ? 500 : 900)) {
+              if (ultraFeed && JAR_SPOON && !isUltraSpawnDrop(body)) {
+                const sp = JAR_SPOON;
+                const towardJarX = body.position.y < sp.tipY + 8
+                  ? (sp.tipX - body.position.x) * 0.14
+                  : (JAR.centerX - body.position.x) * 0.1;
+                Body.setVelocity(body, {
+                  x: body.velocity.x * 0.4 + towardJarX,
+                  y: Math.max(body.velocity.y, 3.2 + Math.random() * 0.8)
+                });
+              } else {
+                Body.setVelocity(body, {
+                  x: (Math.random() - 0.5) * 1.1,
+                  y: Math.max(body.velocity.y, 2.8 + Math.random() * 1.4)
+                });
+              }
+              Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.35);
+              body.lastNudgeTime = now;
+            } else if (body.speed >= 0.35) {
+              body.lastNudgeTime = now;
+            }
+          }
+        });
+      }
+
+      function resetJar() {
+        const gifts = getGiftBodies();
+        World.remove(engine.world, gifts);
+        giftCount = 0;
+        updateRenderQuality();
+      }
+
+      Events.on(render, 'afterRender', () => {
+        const ctx = render.context;
+        const gifts = getGiftBodies();
+
+        for (const body of gifts) {
+          const img = body.giftImage;
+          const r = body.circleRadius;
+          const pos = body.position;
+          const angle = body.isStatic ? 0 : body.angle;
+
+          ctx.save();
+          ctx.translate(pos.x, pos.y);
+          if (!body.isStatic) ctx.rotate(angle);
+
+          if (img && img.complete && img.naturalWidth > 0) {
+            ctx.drawImage(img, -r, -r, r * 2, r * 2);
+          } else {
+            ctx.fillStyle = '#ff4d8d';
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.restore();
+        }
+
+        updateRenderQuality();
+      });
+
+      function isInsideJarX(body, y = body.position.y) {
+        if (isUltraJar) return isUltraInsideX(body, y);
+        if (isJar4) return isJar4InsideX(body, y);
+        return true;
+      }
+
+      Events.on(engine, 'collisionStart', (event) => {
+        if (!isTunedJar) return;
+
+        const bottomY = isUltraJar ? JAR.floorY - 52 : JAR.floorY - 75;
+        event.pairs.forEach((pair) => {
+          let giftA = pair.bodyA;
+          let giftB = pair.bodyB;
+          if (giftA.label !== 'gift' && giftB.label !== 'gift') return;
+          if (giftA.label !== 'gift') [giftA, giftB] = [giftB, giftA];
+          if (giftB.label !== 'gift') return;
+          if (giftA.position.y < bottomY && giftB.position.y < bottomY) return;
+
+          [giftA, giftB].forEach((body) => {
+            if (body.label !== 'gift' || body.isStatic) return;
+            if (isSpilledGift(body) || isOnSpillFloor(body)) return;
+            if (isUltraJar && isUltraInFeedZone(body.position.x, body.position.y)) return;
+            if (!isInsideJarX(body)) return;
+            if (body.speed < 1.2) return;
+            Body.setVelocity(body, {
+              x: body.velocity.x * (isUltraJar ? 0.82 : 0.58),
+              y: body.velocity.y * (isUltraJar ? 0.55 : 0.35),
+            });
+            body.lastNudgeTime = Date.now();
+          });
+        });
+      });
+
+      Events.on(engine, 'sleepStart', (event) => {
+        const body = event.body;
+        if (!body || body.label !== 'gift') return;
+        if (isReadyToFreeze(body)) {
+          freezeGift(body);
+        }
+      });
+
+      Events.on(engine, 'beforeUpdate', () => {
+        removeEscapedGifts();
+        relieveNeckJam();
+        if (isJar4) {
+          recoverJar4SideLeaks();
+          recoverJar4BottomLeaks();
+          stabilizeJar4BottomStack();
+          assistJar4SpillFlow();
+        } else if (isUltraJar) {
+          recoverUltraSideLeaks();
+          recoverUltraBottomLeaks();
+          stabilizeUltraBottomStack();
+          assistUltraFlow();
+        } else {
+          assistSpillFlow();
+        }
+        settleIdleGifts();
+      });
+
+      if (!isPreview) {
+        const socket = createOverlaySocket();
+        socket.on('connect_error', (err) => {
+          console.warn('Overlay socket connect error:', err.message || err);
+        });
+        socket.on('reconnect', () => {
+          console.log('Overlay socket reconnected');
+        });
+        socket.on('gift', (data) => {
+          if (!data.user) return;
+
+          total = data.total || total;
+          document.getElementById('total').textContent = total.toLocaleString('th-TH');
+          document.getElementById('last-gift').textContent =
+            `${data.user} ส่ง ${data.giftName}`;
+
+          const repeatCount = Number(data.repeatCount) || 0;
+          if (repeatCount <= 0) return;
+
+          const count = Math.min(repeatCount, 5);
+          for (let i = 0; i < count; i++) {
+            setTimeout(() => deliverGift(data), i * 120);
+          }
+        });
+      }
+
+      function spawnTestGift(diamonds) {
+        deliverGift({
+          giftPictureUrl: FALLBACK_TEXTURE,
+          diamonds
+        });
+      }
+
+      document.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        if (key === 'g') spawnTestGift(TEST_GIFT_SIZES.g);
+        if (key === 'h') spawnTestGift(TEST_GIFT_SIZES.h);
+        if (key === 'j') spawnTestGift(TEST_GIFT_SIZES.j);
+        if (key === 'r') resetJar();
+      });
+
+      if (isPreview) {
+        let previewCount = 0;
+        const previewSizes = [1, 20, 100];
+        const previewTimer = setInterval(() => {
+          spawnTestGift(previewSizes[previewCount % previewSizes.length]);
+          previewCount++;
+          if (previewCount >= 24) clearInterval(previewTimer);
+        }, 500);
+      }
+
+      Render.run(render);
+      Runner.run(Runner.create(), engine);
+    }
+
+    initPhysics();
+  </script>
+</body>
+</html>
