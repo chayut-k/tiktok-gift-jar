@@ -21,11 +21,236 @@
       text-align: left;
       box-sizing: border-box;
     }
-    #dashboardPage.container {
+    #dashboardPage .dashboard-main {
       max-width: 1140px;
       padding-left: 16px;
       padding-right: 16px;
       box-sizing: border-box;
+    }
+
+    .dashboard-navbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(12, 12, 14, 0.92);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid #2a2a34;
+      margin: -20px -10px 18px;
+      padding: 0 10px;
+    }
+
+    .dashboard-navbar-inner {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .dashboard-navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .dashboard-navbar-title {
+      margin: 0;
+      font-size: 20px;
+      color: #ff0050;
+      white-space: nowrap;
+    }
+
+    .dashboard-admin-link {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 0, 80, 0.12);
+      border: 1px solid rgba(255, 0, 80, 0.28);
+      color: #ff8cb0;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+      white-space: nowrap;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .dashboard-admin-link:hover {
+      background: rgba(255, 0, 80, 0.2);
+      color: #fff;
+    }
+
+    .dashboard-navbar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .dashboard-user-menu {
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .status-navbar {
+      margin: 0;
+      padding: 5px 10px;
+      font-size: 12px;
+      line-height: 1.3;
+      max-width: min(300px, 42vw);
+    }
+
+    .status-navbar .status-dot {
+      width: 8px;
+      height: 8px;
+      flex-shrink: 0;
+    }
+
+    .status-navbar #statusText {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .user-menu-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px 6px 6px;
+      border-radius: 999px;
+      border: 1px solid #355f3d;
+      background: linear-gradient(135deg, rgba(0, 80, 30, 0.55), rgba(0, 51, 0, 0.35));
+      color: #d8ffe8;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      max-width: min(320px, 72vw);
+    }
+
+    .user-menu-trigger:hover,
+    .user-menu-trigger[aria-expanded="true"] {
+      border-color: #00cc66;
+      background: linear-gradient(135deg, rgba(0, 100, 40, 0.65), rgba(0, 60, 20, 0.45));
+    }
+
+    .user-menu-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid rgba(0, 204, 102, 0.55);
+      flex-shrink: 0;
+    }
+
+    .user-menu-text {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      min-width: 0;
+      text-align: left;
+      line-height: 1.25;
+    }
+
+    .user-menu-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f2fff6;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 180px;
+    }
+
+    .user-menu-email {
+      font-size: 11px;
+      color: #9fd4b0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 180px;
+    }
+
+    .user-menu-caret {
+      font-size: 11px;
+      color: #9fd4b0;
+      margin-left: 2px;
+      flex-shrink: 0;
+      transition: transform 0.15s;
+    }
+
+    .user-menu-trigger[aria-expanded="true"] .user-menu-caret {
+      transform: rotate(180deg);
+    }
+
+    .user-menu-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      min-width: 220px;
+      background: #1a1a22;
+      border: 1px solid #333;
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+      overflow: hidden;
+      padding: 6px;
+    }
+
+    .user-menu-dropdown[hidden] {
+      display: none;
+    }
+
+    .user-menu-meta {
+      padding: 10px 12px 8px;
+      border-bottom: 1px solid #2c2c36;
+      margin-bottom: 4px;
+    }
+
+    .user-menu-meta strong {
+      display: block;
+      font-size: 14px;
+      color: #f4f4f8;
+      margin-bottom: 2px;
+      word-break: break-word;
+    }
+
+    .user-menu-meta small {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      word-break: break-all;
+    }
+
+    .user-menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 12px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #eee;
+      font-size: 14px;
+      text-align: left;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .user-menu-item:hover {
+      background: #2a2a34;
+    }
+
+    .user-menu-logout {
+      color: #ff8a8a;
+    }
+
+    .user-menu-logout:hover {
+      background: rgba(204, 0, 0, 0.15);
+      color: #ffb3b3;
     }
     h1 { margin-bottom: 8px; color: #ff0050; font-size: 28px; }
     h2 { color: #ff0050; font-size: 18px; margin-top: 0; }
@@ -580,12 +805,189 @@
     }
     .hearts-demo-heart {
       position: absolute;
-      font-size: 20px;
       pointer-events: none;
       user-select: none;
       animation: heartsDemoFloat 2.8s ease forwards;
       will-change: transform, opacity;
       z-index: 2;
+    }
+    .hearts-demo-heart img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.28));
+    }
+    .heart-picker-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .heart-picker-thumb {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+      background: #111;
+      border-radius: 8px;
+      border: 1px solid #444;
+      flex-shrink: 0;
+    }
+
+    .goal-preview-wrap {
+      background:
+        repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%) 50% / 14px 14px;
+      border: 1px solid #333;
+      border-radius: 10px;
+      padding: 16px;
+      min-height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .goal-preview-wrap .live-goal {
+      width: 100%;
+      max-width: 340px;
+      transform: scale(0.95);
+      transform-origin: center;
+    }
+
+    .goal-preview-wrap .live-goal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .goal-preview-wrap .live-goal-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .goal-preview-wrap .live-goal-pct {
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+
+    .goal-preview-wrap .live-goal-amount {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .goal-preview-wrap .live-goal-coin {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+    }
+
+    .goal-preview-wrap .live-goal-count {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .goal-preview-wrap .live-goal-track {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .goal-preview-wrap .live-goal-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .goal-preview-wrap .live-goal--classic {
+      background: rgba(10, 10, 14, 0.88);
+      border: 1px solid rgba(255, 0, 80, 0.35);
+      border-radius: 14px;
+      padding: 12px 14px;
+    }
+    .goal-preview-wrap .live-goal--classic .live-goal-title { color: #ffe8f0; }
+    .goal-preview-wrap .live-goal--classic .live-goal-pct {
+      background: rgba(255, 0, 80, 0.2);
+      color: #ff8cb0;
+      border: 1px solid rgba(255, 0, 80, 0.35);
+    }
+    .goal-preview-wrap .live-goal--classic .live-goal-count strong { color: #ffd700; }
+    .goal-preview-wrap .live-goal--classic .live-goal-track { background: rgba(255,255,255,0.12); }
+    .goal-preview-wrap .live-goal--classic .live-goal-fill {
+      background: linear-gradient(90deg, #ff0050, #ff4d8d);
+      box-shadow: 0 0 10px rgba(255, 0, 80, 0.45);
+    }
+
+    .goal-preview-wrap .live-goal--neon {
+      background: linear-gradient(145deg, rgba(8, 12, 28, 0.92), rgba(18, 8, 32, 0.92));
+      border: 1px solid rgba(37, 244, 238, 0.45);
+      border-radius: 14px;
+      padding: 12px 14px;
+      box-shadow: 0 0 16px rgba(37, 244, 238, 0.12);
+    }
+    .goal-preview-wrap .live-goal--neon .live-goal-title { color: #c8ffff; }
+    .goal-preview-wrap .live-goal--neon .live-goal-pct {
+      color: #25f4ee;
+      border: 1px solid rgba(37, 244, 238, 0.4);
+      background: rgba(37, 244, 238, 0.1);
+    }
+    .goal-preview-wrap .live-goal--neon .live-goal-count strong { color: #ff6ec7; }
+    .goal-preview-wrap .live-goal--neon .live-goal-track {
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(37, 244, 238, 0.2);
+    }
+    .goal-preview-wrap .live-goal--neon .live-goal-fill {
+      background: linear-gradient(90deg, #25f4ee, #7b61ff 45%, #ff2d9b);
+      box-shadow: 0 0 12px rgba(37, 244, 238, 0.55);
+    }
+
+    .goal-preview-wrap .live-goal--minimal {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .goal-preview-wrap .live-goal--minimal .live-goal-title { color: #e8e8ee; font-size: 12px; }
+    .goal-preview-wrap .live-goal--minimal .live-goal-pct {
+      color: #ccc;
+      border: 1px solid rgba(255,255,255,0.2);
+      font-size: 11px;
+    }
+    .goal-preview-wrap .live-goal--minimal .live-goal-count { font-size: 17px; }
+    .goal-preview-wrap .live-goal--minimal .live-goal-track {
+      height: 7px;
+      background: rgba(255,255,255,0.14);
+    }
+    .goal-preview-wrap .live-goal--minimal .live-goal-fill { background: #fff; }
+
+    .goal-preset-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 6px 0 10px;
+    }
+
+    .goal-preset-btn {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 999px;
+      border: 1px solid #444;
+      background: #1a1a1a;
+      color: #bbb;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+
+    .goal-preset-btn:hover,
+    .goal-preset-btn.active {
+      border-color: #ff0050;
+      color: #fff;
+      background: rgba(255, 0, 80, 0.12);
     }
     @keyframes heartsDemoFloat {
       0% { transform: translateY(0) scale(0.5); opacity: 1; }
@@ -657,18 +1059,29 @@
     }
 
     @media (max-width: 1080px) {
-      #dashboardPage.container { max-width: 800px; }
+      #dashboardPage .dashboard-main,
+      .dashboard-navbar-inner { max-width: 800px; }
       .overlay-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .overlay-grid .physics-preview-wrap { height: 240px; }
       .overlay-grid .physics-preview-scaler { transform: scale(0.4); }
     }
 
     @media (max-width: 560px) {
-      #dashboardPage.container {
+      #dashboardPage .dashboard-main {
         max-width: 100%;
         padding-left: 10px;
         padding-right: 10px;
       }
+      .dashboard-navbar-inner {
+        max-width: 100%;
+        padding-left: 10px;
+        padding-right: 10px;
+      }
+      .user-menu-email { display: none; }
+      .user-menu-name { max-width: 120px; }
+      .dashboard-navbar-right { gap: 8px; }
+      .status-navbar { max-width: 140px; font-size: 11px; padding: 4px 8px; }
+      .status-navbar #statusText { white-space: normal; }
       #loginPage.container { padding: 0 12px 36px; }
       .landing-hero { padding: 22px 16px; margin-top: 12px; }
       .landing-steps { grid-template-columns: 1fr; }
@@ -779,6 +1192,10 @@
           <span>หัวใจลอยเมื่อมีคนกดไลค์ พร้อม Top Likers และ Top Gifters อัปเดตสด</span>
         </li>
         <li>
+          <strong>🎯 Live Goal</strong>
+          <span>ตั้งเป้าหมายเหรียญไลฟ์ แสดงยอดสะสมและแถบเปอร์เซ็นต์ให้ผู้ชมติดตามความคืบหน้า</span>
+        </li>
+        <li>
           <strong>อื่นๆ...</strong>
           
         </li>
@@ -792,23 +1209,46 @@
     </section>
   </div>
 
-  <div class="container" id="dashboardPage" style="display: none;">
-    <div class="dashboard-announce">
-      📢 ระบบมีการอัพเดทใหม่แก้ไขล่าสุด วันที่ 08/07/2569 ขออภัยในความไม่สะดวก
-    </div>
-    <h1>🎥 Dashboard</h1>
-    
-    <!-- User -->
-    <div id="userInfo" class="status connected"></div>
+  <div id="dashboardPage" style="display: none;">
+    <nav class="dashboard-navbar">
+      <div class="dashboard-navbar-inner">
+        <div class="dashboard-navbar-brand">
+          <h1 class="dashboard-navbar-title">🎥 Dashboard</h1>
+          <a href="/admin.html" id="adminNavLink" class="dashboard-admin-link">🛡️ Admin</a>
+        </div>
+        <div class="dashboard-navbar-right">
+        <div id="connectStatus" class="status status-navbar disconnected">
+          <span class="status-dot" style="background:#ff6666"></span>
+          <span id="statusText">ยังไม่ได้เชื่อมต่อ TikTok</span>
+        </div>
+        <div class="dashboard-user-menu">
+          <button class="user-menu-trigger" id="userMenuBtn" type="button" aria-expanded="false" aria-haspopup="true">
+            <img class="user-menu-avatar" id="userMenuAvatar" alt="" hidden>
+            <span class="user-menu-text">
+              <span class="user-menu-name" id="userMenuName">ผู้ใช้</span>
+              <span class="user-menu-email" id="userMenuEmail"></span>
+            </span>
+            <span class="user-menu-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="user-menu-dropdown" id="userMenuDropdown" hidden>
+            <div class="user-menu-meta">
+              <strong id="userMenuDisplayName">ผู้ใช้</strong>
+              <small id="userMenuDisplayEmail"></small>
+            </div>
+            <button class="user-menu-item user-menu-logout" id="logoutBtn" type="button">ออกจากระบบ</button>
+          </div>
+        </div>
+        </div>
+      </div>
+    </nav>
 
+    <div class="container dashboard-main">
+    <div class="dashboard-announce">
+      📢 ระบบมีการอัพเดทใหม่แก้ไขล่าสุด วันที่ 10/07/2569 ขออภัยในความไม่สะดวก
+    </div>
+    <div style="height: 10px;"></div>
     <div class="dashboard-warning">
       ⚠️ <strong>สำคัญ:</strong> เปิด Dashboard ค้างไว้ระหว่างไลฟ์ — กด「เชื่อมต่อ」ครั้งเดียว ระบบจะรอไลฟ์อัตโนมัติถ้ายังไม่ขึ้น — เน็ตหลุดชั่วคราวจะพยายามเชื่อมใหม่ — ปิดแท็บนานเกิน 45 วินาทีจะตัดการเชื่อมต่อ
-    </div>
-
-    <!-- Connection Status -->
-    <div id="connectStatus" class="status disconnected">
-      <span class="status-dot" style="background:#ff6666"></span>
-      <span id="statusText">ยังไม่ได้เชื่อมต่อ TikTok</span>
     </div>
 
     <!-- TikTok Connect -->
@@ -844,7 +1284,7 @@
         <button class="btn btn-danger" id="disconnectBtn" type="button">ตัดการเชื่อมต่อ</button>
       </div>
     </div>
-
+    <div style="height: 5px;"></div>
     <!-- Overlays -->
     <div class="card">
       <h2>📺 Overlay URLs</h2>
@@ -858,14 +1298,15 @@
       </div>
       <div class="help" id="overlayHint" style="margin-top:8px;">กรอก TikTok Username ด้านบนเพื่อสร้างลิงก์ — ไม่ต้องเชื่อมต่อก็ใช้งานได้</div>
     </div>
-
-    <button class="btn btn-secondary" id="logoutBtn" type="button" style="margin-top:10px;">ออกจากระบบ</button>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/tts-text-utils.js?v=1.0.12"></script>
-  <script src="/js/tts-config.js?v=1.0.12"></script>
-  <script src="/js/tts-overlay.js?v=1.0.12"></script>
+  <script src="/js/tts-text-utils.js?v=1.0.13"></script>
+  <script src="/js/tts-config.js?v=1.0.13"></script>
+  <script src="/js/tts-overlay.js?v=1.0.13"></script>
+  <script src="/js/hearts-config.js?v=1.0.13"></script>
+  <script src="/js/goal-config.js?v=1.0.13"></script>
   <script>
     let socket = null;
     let socketReadyPromise = null;
@@ -894,11 +1335,16 @@
     let selectedTtsVolume = 100;
     let selectedTtsSpeed = 100;
     let selectedTtsFormat = 'full';
+    let selectedHeartImage = 'red';
+    let selectedHeartSize = 'md';
+    let selectedHeartSpread = 'normal';
+    let selectedGoalTarget = 500;
+    let selectedGoalStyle = 'classic';
+    let goalDemoCurrent = 0;
     let jarDemoTimer = null;
     let heartsDemoTimer = null;
+    let goalDemoTimer = null;
     const heartsDemoTimeouts = [];
-
-    const HEART_DEMO_COLORS = ['#ff69b4', '#ff1493', '#c71585', '#da70d6', '#ba55d3', '#ff00ff'];
 
     const JAR_OPTIONS = [1, 2, 3, 4, 5, 6].map((id) => ({
       id,
@@ -977,6 +1423,11 @@
       const savedTtsVolume = parseTtsVolume(localStorage.getItem('tgj_tts_volume'), 100);
       const savedTtsSpeed = parseTtsSpeed(localStorage.getItem('tgj_tts_speed'), 100);
       const savedTtsFormat = localStorage.getItem('tgj_tts_format');
+      const savedHeartImage = localStorage.getItem('tgj_heart_image');
+      const savedHeartSize = localStorage.getItem('tgj_heart_size');
+      const savedHeartSpread = localStorage.getItem('tgj_heart_spread');
+      const savedGoalTarget = localStorage.getItem('tgj_goal_target');
+      const savedGoalStyle = localStorage.getItem('tgj_goal_style');
       if (savedPhysics && PHYSICS_JAR_OPTIONS.some((jar) => jar.id === savedPhysics)) {
         selectedPhysicsJar = savedPhysics;
       }
@@ -1011,6 +1462,21 @@
       selectedTtsSpeed = savedTtsSpeed;
       if (TTS_FORMAT_OPTIONS.some((opt) => opt.id === savedTtsFormat)) {
         selectedTtsFormat = normalizeTtsFormat(savedTtsFormat, 'full');
+      }
+      if (savedHeartImage) {
+        selectedHeartImage = parseHeartImageParam(savedHeartImage, selectedHeartImage);
+      }
+      if (savedHeartSize) {
+        selectedHeartSize = parseHeartSizeParam(savedHeartSize, selectedHeartSize);
+      }
+      if (savedHeartSpread) {
+        selectedHeartSpread = parseHeartSpreadParam(savedHeartSpread, selectedHeartSpread);
+      }
+      if (savedGoalTarget) {
+        selectedGoalTarget = parseGoalTarget(savedGoalTarget, selectedGoalTarget);
+      }
+      if (savedGoalStyle) {
+        selectedGoalStyle = parseGoalStyleParam(savedGoalStyle, selectedGoalStyle);
       }
     }
 
@@ -1407,25 +1873,34 @@
       document.getElementById('loginPage').style.display = 'none';
       document.getElementById('dashboardPage').style.display = 'block';
 
-      const userInfo = document.getElementById('userInfo');
-      userInfo.replaceChildren();
-
-      if (user.picture) {
-        const img = document.createElement('img');
-        img.src = user.picture;
-        img.alt = user.name || 'User';
-        img.className = 'user-avatar';
-        userInfo.appendChild(img);
+      const adminLink = document.getElementById('adminNavLink');
+      if (adminLink) {
+        adminLink.style.display = user.isAdmin ? 'inline-flex' : 'none';
       }
 
-      const welcome = document.createElement('span');
-      welcome.innerHTML = `ยินดีต้อนรับ <strong>${user.name}</strong>`;
-      userInfo.appendChild(welcome);
-      userInfo.appendChild(document.createElement('br'));
+      const displayName = user.name || user.email || 'ผู้ใช้';
+      const avatar = document.getElementById('userMenuAvatar');
+      const nameEl = document.getElementById('userMenuName');
+      const emailEl = document.getElementById('userMenuEmail');
+      const displayNameEl = document.getElementById('userMenuDisplayName');
+      const displayEmailEl = document.getElementById('userMenuDisplayEmail');
 
-      const emailEl = document.createElement('small');
-      emailEl.textContent = user.email;
-      userInfo.appendChild(emailEl);
+      if (avatar) {
+        if (user.picture) {
+          avatar.src = user.picture;
+          avatar.alt = displayName;
+          avatar.hidden = false;
+        } else {
+          avatar.hidden = true;
+          avatar.removeAttribute('src');
+        }
+      }
+      if (nameEl) nameEl.textContent = displayName;
+      if (emailEl) emailEl.textContent = user.email || '';
+      if (displayNameEl) displayNameEl.textContent = displayName;
+      if (displayEmailEl) displayEmailEl.textContent = user.email || '';
+
+      closeUserMenu();
 
       // Prefill saved data
       if (user.tiktokUsername) {
@@ -1782,7 +2257,7 @@
       renderOverlayPanels();
     }
 
-    const OVERLAY_ASSET_VERSION = '1.0.12';
+    const OVERLAY_ASSET_VERSION = '1.0.13';
 
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);
@@ -1936,20 +2411,42 @@
       jarDemoTimer = setInterval(dropJarDemoGift, 5000);
     }
 
+    function spawnSingleDemoHeart(container, delayMs = 0) {
+      const heartOpt = getHeartImageOption(selectedHeartImage);
+      const sizePx = getHeartSizePx(selectedHeartSize);
+
+      const timeoutId = setTimeout(() => {
+        if (!container) return;
+
+        const pos = randomHeartPosition(selectedHeartSpread);
+        const heart = document.createElement('div');
+        heart.className = 'hearts-demo-heart';
+        heart.style.left = pos.left + '%';
+        heart.style.bottom = pos.bottom + 'px';
+        heart.style.width = sizePx + 'px';
+        heart.style.height = sizePx + 'px';
+
+        const img = document.createElement('img');
+        img.src = heartOpt.image;
+        img.alt = heartOpt.label;
+        heart.appendChild(img);
+        container.appendChild(heart);
+
+        const removeId = setTimeout(() => heart.remove(), 2900);
+        heartsDemoTimeouts.push(removeId);
+      }, delayMs);
+
+      heartsDemoTimeouts.push(timeoutId);
+    }
+
     function spawnHeartsDemoHeart() {
       const container = document.getElementById('heartsDemoPreview');
       if (!container) return;
 
-      const heart = document.createElement('div');
-      heart.className = 'hearts-demo-heart';
-      heart.style.left = (8 + Math.random() * 22) + '%';
-      heart.style.bottom = '14px';
-      heart.style.color = HEART_DEMO_COLORS[Math.floor(Math.random() * HEART_DEMO_COLORS.length)];
-      heart.textContent = '❤️';
-      container.appendChild(heart);
-
-      const timeoutId = setTimeout(() => heart.remove(), 2900);
-      heartsDemoTimeouts.push(timeoutId);
+      const burstCount = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < burstCount; i++) {
+        spawnSingleDemoHeart(container, i * (55 + Math.floor(Math.random() * 35)));
+      }
     }
 
     function stopHeartsDemoAnimation() {
@@ -1966,6 +2463,182 @@
       stopHeartsDemoAnimation();
       spawnHeartsDemoHeart();
       heartsDemoTimer = setInterval(spawnHeartsDemoHeart, 900);
+    }
+
+    function renderGoalPreview() {
+      const container = document.getElementById('goalPreview');
+      if (!container) return;
+      container.innerHTML = buildGoalWidgetMarkup(
+        goalDemoCurrent,
+        selectedGoalTarget,
+        selectedGoalStyle
+      );
+    }
+
+    function stopGoalDemoAnimation() {
+      if (goalDemoTimer) {
+        clearInterval(goalDemoTimer);
+        goalDemoTimer = null;
+      }
+      goalDemoCurrent = 0;
+      const container = document.getElementById('goalPreview');
+      if (container) container.replaceChildren();
+    }
+
+    function startGoalDemoAnimation() {
+      stopGoalDemoAnimation();
+      goalDemoCurrent = Math.floor(selectedGoalTarget * 0.12);
+      renderGoalPreview();
+      goalDemoTimer = setInterval(() => {
+        goalDemoCurrent += Math.floor(selectedGoalTarget * 0.035)
+          + Math.floor(Math.random() * Math.max(2, selectedGoalTarget * 0.015));
+        if (goalDemoCurrent >= selectedGoalTarget * 0.92) {
+          goalDemoCurrent = Math.floor(selectedGoalTarget * 0.1);
+        }
+        renderGoalPreview();
+      }, 1800);
+    }
+
+    function getLiveGoalUrl(
+      target = selectedGoalTarget,
+      styleId = selectedGoalStyle
+    ) {
+      return buildOverlayUrl('/live-goal.html', getOverlayUsername(), {
+        goal: target,
+        style: styleId,
+      });
+    }
+
+    function updateLiveGoalOverlay() {
+      const link = document.getElementById('liveGoalLinkText');
+      if (link) link.textContent = getLiveGoalUrl();
+
+      const targetInput = document.getElementById('goalTargetInput');
+      if (targetInput) targetInput.value = String(selectedGoalTarget);
+
+      const styleSelect = document.getElementById('goalStyleSelect');
+      if (styleSelect) styleSelect.value = selectedGoalStyle;
+
+      document.querySelectorAll('.goal-preset-btn').forEach((btn) => {
+        btn.classList.toggle('active', parseInt(btn.dataset.goal, 10) === selectedGoalTarget);
+      });
+
+      startGoalDemoAnimation();
+    }
+
+    function selectGoalTarget(value) {
+      selectedGoalTarget = parseGoalTarget(value, selectedGoalTarget);
+      localStorage.setItem('tgj_goal_target', String(selectedGoalTarget));
+      updateLiveGoalOverlay();
+    }
+
+    function selectGoalStyle(styleId) {
+      selectedGoalStyle = parseGoalStyleParam(styleId, selectedGoalStyle);
+      localStorage.setItem('tgj_goal_style', selectedGoalStyle);
+      updateLiveGoalOverlay();
+    }
+
+    function createLiveGoalOverlayItem() {
+      const getUrl = () => getLiveGoalUrl();
+
+      const item = document.createElement('div');
+      item.className = 'overlay-item';
+
+      const top = document.createElement('div');
+      top.className = 'overlay-item-top';
+
+      const info = document.createElement('div');
+      info.className = 'overlay-item-info';
+      info.innerHTML = `
+        <strong>🎯 Live Goal</strong><br>
+        <span id="liveGoalLinkText">${getUrl()}</span>
+      `;
+
+      const actions = document.createElement('div');
+      actions.className = 'overlay-actions';
+
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'small-btn';
+      copyBtn.type = 'button';
+      copyBtn.textContent = 'Copy';
+      copyBtn.addEventListener('click', () => copyToClipboard(getUrl(), copyBtn));
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'small-btn';
+      openBtn.type = 'button';
+      openBtn.textContent = 'Open';
+      openBtn.addEventListener('click', () => window.open(getUrl(), '_blank'));
+
+      actions.append(copyBtn, openBtn);
+      top.append(info, actions);
+      item.appendChild(top);
+
+      const pickerRow = document.createElement('div');
+      pickerRow.className = 'jar-picker-row';
+
+      const targetLabel = document.createElement('label');
+      targetLabel.textContent = 'เป้าหมายเหรียญ';
+      targetLabel.setAttribute('for', 'goalTargetInput');
+
+      const targetInput = document.createElement('input');
+      targetInput.type = 'number';
+      targetInput.id = 'goalTargetInput';
+      targetInput.min = '1';
+      targetInput.max = '9999999';
+      targetInput.step = '1';
+      targetInput.value = String(selectedGoalTarget);
+      targetInput.placeholder = 'เช่น 500';
+      targetInput.addEventListener('change', () => selectGoalTarget(targetInput.value));
+
+      const presetRow = document.createElement('div');
+      presetRow.className = 'goal-preset-row';
+      GOAL_TARGET_PRESETS.forEach((preset) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'goal-preset-btn' + (preset === selectedGoalTarget ? ' active' : '');
+        btn.dataset.goal = String(preset);
+        btn.textContent = formatGoalNumber(preset);
+        btn.addEventListener('click', () => selectGoalTarget(preset));
+        presetRow.appendChild(btn);
+      });
+
+      const styleLabel = document.createElement('label');
+      styleLabel.textContent = 'รูปแบบแถบเป้าหมาย';
+      styleLabel.setAttribute('for', 'goalStyleSelect');
+      styleLabel.style.marginTop = '8px';
+
+      const styleSelect = document.createElement('select');
+      styleSelect.id = 'goalStyleSelect';
+      styleSelect.className = 'jar-select';
+      GOAL_STYLE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedGoalStyle) option.selected = true;
+        styleSelect.appendChild(option);
+      });
+      styleSelect.addEventListener('change', () => selectGoalStyle(styleSelect.value));
+
+      const previewCaption = document.createElement('p');
+      previewCaption.className = 'preview-caption';
+      previewCaption.textContent = 'ยอดเหรียญสะสมจากของขวัญจะอัปเดตอัตโนมัติระหว่างไลฟ์';
+
+      const previewWrap = document.createElement('div');
+      previewWrap.className = 'goal-preview-wrap';
+      previewWrap.id = 'goalPreview';
+
+      pickerRow.append(
+        targetLabel,
+        targetInput,
+        presetRow,
+        styleLabel,
+        styleSelect,
+        previewWrap,
+        previewCaption
+      );
+      item.appendChild(pickerRow);
+      startGoalDemoAnimation();
+      return item;
     }
 
     function selectGiftJar(jarId) {
@@ -2613,8 +3286,60 @@
       return item;
     }
 
+    function getLikeHeartsUrl(
+      heartId = selectedHeartImage,
+      sizeId = selectedHeartSize,
+      spreadId = selectedHeartSpread
+    ) {
+      return buildOverlayUrl('/like-hearts.html', getOverlayUsername(), {
+        heart: heartId,
+        heartsize: sizeId,
+        spread: spreadId,
+      });
+    }
+
+    function updateLikeHeartsOverlay() {
+      const link = document.getElementById('likeHeartsLinkText');
+      if (link) link.textContent = getLikeHeartsUrl();
+
+      const thumb = document.getElementById('heartPickerThumb');
+      if (thumb) {
+        thumb.src = getHeartImageOption(selectedHeartImage).image;
+        thumb.alt = getHeartImageOption(selectedHeartImage).label;
+      }
+
+      const heartSelect = document.getElementById('heartImageSelect');
+      if (heartSelect) heartSelect.value = selectedHeartImage;
+
+      const sizeSelect = document.getElementById('heartSizeSelect');
+      if (sizeSelect) sizeSelect.value = selectedHeartSize;
+
+      const spreadSelect = document.getElementById('heartSpreadSelect');
+      if (spreadSelect) spreadSelect.value = selectedHeartSpread;
+
+      startHeartsDemoAnimation();
+    }
+
+    function selectHeartImage(heartId) {
+      selectedHeartImage = parseHeartImageParam(heartId, selectedHeartImage);
+      localStorage.setItem('tgj_heart_image', selectedHeartImage);
+      updateLikeHeartsOverlay();
+    }
+
+    function selectHeartSize(sizeId) {
+      selectedHeartSize = parseHeartSizeParam(sizeId, selectedHeartSize);
+      localStorage.setItem('tgj_heart_size', selectedHeartSize);
+      updateLikeHeartsOverlay();
+    }
+
+    function selectHeartSpread(spreadId) {
+      selectedHeartSpread = parseHeartSpreadParam(spreadId, selectedHeartSpread);
+      localStorage.setItem('tgj_heart_spread', selectedHeartSpread);
+      updateLikeHeartsOverlay();
+    }
+
     function createLikeHeartsOverlayItem() {
-      const getUrl = () => buildOverlayUrl('/like-hearts.html', getOverlayUsername());
+      const getUrl = () => getLikeHeartsUrl();
 
       const item = document.createElement('div');
       item.className = 'overlay-item';
@@ -2651,18 +3376,88 @@
       const pickerRow = document.createElement('div');
       pickerRow.className = 'jar-picker-row';
 
-      const pickerLabel = document.createElement('label');
-      pickerLabel.textContent = 'ตัวอย่างหัวใจลอยด้านซ้าย';
+      const heartLabel = document.createElement('label');
+      heartLabel.textContent = 'เลือกรูปหัวใจ';
+      heartLabel.setAttribute('for', 'heartImageSelect');
+
+      const heartControls = document.createElement('div');
+      heartControls.className = 'heart-picker-controls';
+
+      const heartSelect = document.createElement('select');
+      heartSelect.id = 'heartImageSelect';
+      heartSelect.className = 'jar-select';
+      heartSelect.style.margin = '0';
+      heartSelect.style.flex = '1';
+      heartSelect.style.minWidth = '160px';
+      HEART_IMAGE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedHeartImage) option.selected = true;
+        heartSelect.appendChild(option);
+      });
+      heartSelect.addEventListener('change', () => selectHeartImage(heartSelect.value));
+
+      const heartThumb = document.createElement('img');
+      heartThumb.id = 'heartPickerThumb';
+      heartThumb.className = 'heart-picker-thumb';
+      heartThumb.src = getHeartImageOption(selectedHeartImage).image;
+      heartThumb.alt = getHeartImageOption(selectedHeartImage).label;
+
+      heartControls.append(heartSelect, heartThumb);
+
+      const sizeLabel = document.createElement('label');
+      sizeLabel.textContent = 'ขนาดหัวใจ';
+      sizeLabel.setAttribute('for', 'heartSizeSelect');
+      sizeLabel.style.marginTop = '8px';
+
+      const sizeSelect = document.createElement('select');
+      sizeSelect.id = 'heartSizeSelect';
+      sizeSelect.className = 'jar-select';
+      HEART_SIZE_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedHeartSize) option.selected = true;
+        sizeSelect.appendChild(option);
+      });
+      sizeSelect.addEventListener('change', () => selectHeartSize(sizeSelect.value));
+
+      const spreadLabel = document.createElement('label');
+      spreadLabel.textContent = 'ความกระจาย';
+      spreadLabel.setAttribute('for', 'heartSpreadSelect');
+      spreadLabel.style.marginTop = '8px';
+
+      const spreadSelect = document.createElement('select');
+      spreadSelect.id = 'heartSpreadSelect';
+      spreadSelect.className = 'jar-select';
+      HEART_SPREAD_OPTIONS.forEach((opt) => {
+        const option = document.createElement('option');
+        option.value = opt.id;
+        option.textContent = opt.label;
+        if (opt.id === selectedHeartSpread) option.selected = true;
+        spreadSelect.appendChild(option);
+      });
+      spreadSelect.addEventListener('change', () => selectHeartSpread(spreadSelect.value));
 
       const previewCaption = document.createElement('p');
       previewCaption.className = 'preview-caption';
-      previewCaption.textContent = 'หัวใจจะลอยขึ้นเมื่อมีคนกดไลค์ระหว่าง Live';
+      previewCaption.textContent = 'ตัวอย่างหัวใจลอยด้านซ้ายเมื่อมีคนกดไลค์ (2–4 ดวงต่อครั้ง)';
 
       const previewWrap = document.createElement('div');
       previewWrap.className = 'hearts-demo-preview';
       previewWrap.id = 'heartsDemoPreview';
 
-      pickerRow.append(pickerLabel, previewWrap, previewCaption);
+      pickerRow.append(
+        heartLabel,
+        heartControls,
+        sizeLabel,
+        sizeSelect,
+        spreadLabel,
+        spreadSelect,
+        previewWrap,
+        previewCaption
+      );
       item.appendChild(pickerRow);
       startHeartsDemoAnimation();
       return item;
@@ -3158,6 +3953,7 @@
 
       stopJarDemoAnimation();
       stopHeartsDemoAnimation();
+      stopGoalDemoAnimation();
 
       overlayDiv.replaceChildren();
       ttsDiv.replaceChildren();
@@ -3176,6 +3972,7 @@
       overlayDiv.appendChild(createTopLikersOverlayItem());
       overlayDiv.appendChild(createTopGiftersOverlayItem());
       overlayDiv.appendChild(createLikeHeartsOverlayItem());
+      overlayDiv.appendChild(createLiveGoalOverlayItem());
 
       ttsDiv.appendChild(createGiftTtsOverlayItem());
     }
@@ -3204,7 +4001,8 @@
       const div = document.createElement('div');
       div.className = 'message ' + (isError ? 'error' : 'success');
       div.textContent = msg;
-      const dashboard = document.getElementById('dashboardPage');
+      const dashboard = document.querySelector('#dashboardPage .dashboard-main');
+      if (!dashboard) return;
       dashboard.insertBefore(div, dashboard.firstChild);
 
       setTimeout(() => div.remove(), 3500);
@@ -3219,11 +4017,39 @@
       window.location.reload();
     }
 
+    function closeUserMenu() {
+      const dropdown = document.getElementById('userMenuDropdown');
+      const btn = document.getElementById('userMenuBtn');
+      if (dropdown) dropdown.hidden = true;
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    function bindUserMenu() {
+      const btn = document.getElementById('userMenuBtn');
+      const dropdown = document.getElementById('userMenuDropdown');
+      if (!btn || !dropdown) return;
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = dropdown.hidden;
+        dropdown.hidden = !willOpen;
+        btn.setAttribute('aria-expanded', String(willOpen));
+      });
+
+      dropdown.addEventListener('click', (e) => e.stopPropagation());
+
+      document.addEventListener('click', closeUserMenu);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeUserMenu();
+      });
+    }
+
     function bindEvents() {
       document.getElementById('connectBtn').addEventListener('click', connectTikTok);
       document.getElementById('saveOnlyBtn').addEventListener('click', saveOnly);
       document.getElementById('disconnectBtn').addEventListener('click', disconnectTikTok);
       document.getElementById('logoutBtn').addEventListener('click', logout);
+      bindUserMenu();
       bindOverlayTabs();
       const tiktokInput = document.getElementById('tiktokUsername');
       if (tiktokInput) {

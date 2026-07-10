@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard — TikTok Live Overlay</title>
+  <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
+  <style>
+    :root {
+      --bg: #0c0c10;
+      --panel: #16161c;
+      --panel-2: #1e1e26;
+      --border: #2c2c38;
+      --text: #ececf1;
+      --muted: #8b8b9a;
+      --pink: #ff0050;
+      --pink-soft: rgba(255, 0, 80, 0.14);
+      --cyan: #25f4ee;
+      --green: #00d68f;
+      --amber: #ffcc66;
+      --red: #ff6b6b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255, 0, 80, 0.12), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 100% 0%, rgba(37, 244, 238, 0.06), transparent 50%),
+        var(--bg);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px 20px 48px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand img {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      border: 2px solid rgba(255, 0, 80, 0.4);
+      object-fit: cover;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 22px;
+      background: linear-gradient(90deg, #ff4d8d, var(--pink) 50%, var(--cyan));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .brand p {
+      margin: 2px 0 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+
+    .btn:hover {
+      border-color: #444;
+      background: var(--panel-2);
+    }
+
+    .btn:active { transform: scale(0.98); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #ff0050, #c8004a);
+      border-color: transparent;
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #ff2d6f, #d40052);
+    }
+
+    .btn-ghost {
+      background: transparent;
+    }
+
+    .meta-line {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .meta-line .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px rgba(0, 214, 143, 0.6);
+      animation: pulse 2s ease infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.45; }
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      opacity: 0.12;
+      transform: translate(30%, -30%);
+    }
+
+    .stat-card.total::after { background: var(--cyan); }
+    .stat-card.active::after { background: var(--green); }
+    .stat-card.connected::after { background: var(--amber); }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 34px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-card.total .stat-value { color: var(--cyan); }
+    .stat-card.active .stat-value { color: var(--green); }
+    .stat-card.connected .stat-value { color: var(--amber); }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-head h2 {
+      margin: 0;
+      font-size: 16px;
+      color: #fff;
+    }
+
+    .panel-head span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #242430;
+      font-size: 13px;
+    }
+
+    th {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      background: rgba(0, 0, 0, 0.2);
+      font-weight: 600;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    .user-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 180px;
+    }
+
+    .user-cell strong {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .user-cell small {
+      color: var(--muted);
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .badge.online {
+      background: rgba(0, 214, 143, 0.14);
+      color: var(--green);
+      border: 1px solid rgba(0, 214, 143, 0.25);
+    }
+
+    .badge.offline {
+      background: rgba(139, 139, 154, 0.12);
+      color: var(--muted);
+      border: 1px solid rgba(139, 139, 154, 0.2);
+    }
+
+    .badge.live {
+      background: rgba(255, 204, 102, 0.14);
+      color: var(--amber);
+      border: 1px solid rgba(255, 204, 102, 0.28);
+    }
+
+    .badge.wait {
+      background: rgba(37, 244, 238, 0.12);
+      color: var(--cyan);
+      border: 1px solid rgba(37, 244, 238, 0.25);
+    }
+
+    .mono {
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 12px;
+      color: #c8c8d4;
+    }
+
+    .count-pill {
+      display: inline-flex;
+      min-width: 36px;
+      justify-content: center;
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: var(--pink-soft);
+      color: #ff8cb0;
+      font-weight: 700;
+    }
+
+    .empty, .loading, .error-box {
+      padding: 48px 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .error-box {
+      color: var(--red);
+      background: rgba(255, 107, 107, 0.08);
+      border: 1px solid rgba(255, 107, 107, 0.2);
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .access-denied {
+      max-width: 420px;
+      margin: 80px auto;
+      text-align: center;
+      padding: 32px 24px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+
+    .access-denied h2 {
+      margin: 0 0 8px;
+      color: #fff;
+    }
+
+    .access-denied p {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle input {
+      accent-color: var(--pink);
+    }
+
+    @media (max-width: 900px) {
+      .stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/images/icon.jpg" alt="TikTok Live Overlay">
+        <div>
+          <h1>Admin Dashboard</h1>
+          <p>มอนิเตอร์ผู้ใช้งานระบบ TikTok Live Overlay</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <label class="toggle">
+          <input type="checkbox" id="autoRefresh" checked>
+          รีเฟรชอัตโนมัติ (30 วิ)
+        </label>
+        <button class="btn btn-ghost" type="button" id="refreshBtn">↻ รีเฟรช</button>
+        <a class="btn" href="/">← กลับ Dashboard</a>
+      </div>
+    </header>
+
+    <div class="meta-line">
+      <span class="dot" id="liveDot"></span>
+      <span id="generatedAt">กำลังโหลด...</span>
+      <span id="adminEmail"></span>
+    </div>
+
+    <div id="errorBox" class="error-box" hidden></div>
+
+    <section class="stats">
+      <article class="stat-card total">
+        <div class="stat-label">ผู้ใช้ทั้งหมดในระบบ</div>
+        <div class="stat-value" id="statTotal">—</div>
+      </article>
+      <article class="stat-card active">
+        <div class="stat-label">ใช้งานอยู่ขณะนี้</div>
+        <div class="stat-value" id="statActive">—</div>
+      </article>
+      <article class="stat-card connected">
+        <div class="stat-label">เชื่อมต่อ TikTok Live</div>
+        <div class="stat-value" id="statConnected">—</div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>รายชื่อผู้ใช้</h2>
+        <span id="userCountLabel">0 รายการ</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ผู้ใช้</th>
+              <th>TikTok Username</th>
+              <th>สถานะ</th>
+              <th>เข้าสู่ระบบล่าสุด</th>
+              <th>จำนวนครั้งที่เข้าใช้</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody">
+            <tr><td colspan="5" class="loading">กำลังโหลดข้อมูล...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="access-denied" id="denied" hidden>
+    <h2>ไม่มีสิทธิ์เข้าถึง</h2>
+    <p>หน้านี้สงวนไว้สำหรับผู้ดูแลระบบเท่านั้น กรุณา Login ด้วยบัญชี Admin</p>
+    <a class="btn btn-primary" href="/">กลับหน้าหลัก</a>
+  </div>
+
+  <script>
+    const REFRESH_MS = 30000;
+    let refreshTimer = null;
+
+    function formatDateTime(iso) {
+      if (!iso) return '—';
+      try {
+        return new Date(iso).toLocaleString('th-TH', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+      } catch {
+        return '—';
+      }
+    }
+
+    function renderStatus(user) {
+      if (user.isConnected) {
+        return '<span class="badge live">● Live</span>';
+      }
+      if (user.waitingForLive) {
+        return '<span class="badge wait">⏳ รอไลฟ์</span>';
+      }
+      if (user.isActive) {
+        const tabs = user.dashboardTabs > 1 ? ` (${user.dashboardTabs} แท็บ)` : '';
+        return `<span class="badge online">● ออนไลน์${tabs}</span>`;
+      }
+      return '<span class="badge offline">ออฟไลน์</span>';
+    }
+
+    function renderRows(users) {
+      const tbody = document.getElementById('userTableBody');
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">ยังไม่มีผู้ใช้ในระบบ</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = users.map((user) => `
+        <tr>
+          <td>
+            <div class="user-cell">
+              <strong>${escapeHtml(user.name || user.email)}</strong>
+              <small>${escapeHtml(user.email)}</small>
+            </div>
+          </td>
+          <td class="mono">${user.tiktokUsername ? '@' + escapeHtml(user.tiktokUsername) : '—'}</td>
+          <td>${renderStatus(user)}</td>
+          <td>${formatDateTime(user.lastLoginAt)}</td>
+          <td><span class="count-pill">${user.loginCount || 0}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function showError(message) {
+      const box = document.getElementById('errorBox');
+      if (!message) {
+        box.hidden = true;
+        box.textContent = '';
+        return;
+      }
+      box.hidden = false;
+      box.textContent = message;
+    }
+
+    async function loadOverview() {
+      const res = await fetch('/api/admin/overview', { credentials: 'include' });
+      if (res.status === 403) throw new Error('forbidden');
+      if (!res.ok) throw new Error('โหลดข้อมูลไม่สำเร็จ');
+      return res.json();
+    }
+
+    async function refresh() {
+      try {
+        showError('');
+        const data = await loadOverview();
+        if (!data.success) throw new Error(data.error || 'โหลดข้อมูลไม่สำเร็จ');
+
+        document.getElementById('statTotal').textContent = data.stats.totalUsers;
+        document.getElementById('statActive').textContent = data.stats.activeNow;
+        document.getElementById('statConnected').textContent = data.stats.connectedNow;
+        document.getElementById('userCountLabel').textContent = `${data.users.length} รายการ`;
+        document.getElementById('generatedAt').textContent =
+          `อัปเดตล่าสุด: ${formatDateTime(data.generatedAt)}`;
+
+        renderRows(data.users);
+      } catch (err) {
+        if (err.message === 'forbidden') {
+          document.getElementById('app').hidden = true;
+          document.getElementById('denied').hidden = false;
+          stopAutoRefresh();
+          return;
+        }
+        showError(err.message || 'เกิดข้อผิดพลาด');
+      }
+    }
+
+    function stopAutoRefresh() {
+      if (refreshTimer) {
+        clearInterval(refreshTimer);
+        refreshTimer = null;
+      }
+    }
+
+    function setupAutoRefresh() {
+      stopAutoRefresh();
+      const enabled = document.getElementById('autoRefresh').checked;
+      if (enabled) {
+        refreshTimer = setInterval(refresh, REFRESH_MS);
+      }
+    }
+
+    async function init() {
+      const meRes = await fetch('/api/me', { credentials: 'include' });
+      const me = await meRes.json();
+
+      if (!me.loggedIn || !me.isAdmin) {
+        document.getElementById('denied').hidden = false;
+        return;
+      }
+
+      document.getElementById('app').hidden = false;
+      document.getElementById('adminEmail').textContent = `Admin: ${me.email}`;
+
+      document.getElementById('refreshBtn').addEventListener('click', refresh);
+      document.getElementById('autoRefresh').addEventListener('change', setupAutoRefresh);
+
+      await refresh();
+      setupAutoRefresh();
+    }
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
+  <title>Live Goal</title>
+  <style>
+    body {
+      background: transparent;
+      margin: 0;
+      padding: 14px;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #fff;
+    }
+
+    .live-goal {
+      width: 360px;
+      box-sizing: border-box;
+    }
+
+    .live-goal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .live-goal-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .live-goal-pct {
+      font-size: 14px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    .live-goal-amount {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .live-goal-coin {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .live-goal-count {
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .live-goal-count strong {
+      font-weight: 800;
+    }
+
+    .live-goal-track {
+      height: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .live-goal-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Classic — TikTok Pink */
+    .live-goal--classic {
+      background: rgba(10, 10, 14, 0.72);
+      border: 1px solid rgba(255, 0, 80, 0.35);
+      border-radius: 16px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    .live-goal--classic .live-goal-title { color: #ffe8f0; }
+    .live-goal--classic .live-goal-pct {
+      background: rgba(255, 0, 80, 0.2);
+      color: #ff8cb0;
+      border: 1px solid rgba(255, 0, 80, 0.35);
+    }
+    .live-goal--classic .live-goal-count { color: #fff; }
+    .live-goal--classic .live-goal-count strong { color: #ffd700; }
+    .live-goal--classic .live-goal-track {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .live-goal--classic .live-goal-fill {
+      background: linear-gradient(90deg, #ff0050, #ff4d8d 55%, #ff8cb0);
+      box-shadow: 0 0 12px rgba(255, 0, 80, 0.55);
+    }
+
+    /* Neon */
+    .live-goal--neon {
+      background: linear-gradient(145deg, rgba(8, 12, 28, 0.88), rgba(18, 8, 32, 0.88));
+      border: 1px solid rgba(37, 244, 238, 0.45);
+      border-radius: 16px;
+      padding: 14px 16px;
+      box-shadow:
+        0 0 20px rgba(37, 244, 238, 0.15),
+        0 0 28px rgba(255, 0, 128, 0.12),
+        inset 0 0 24px rgba(37, 244, 238, 0.04);
+    }
+
+    .live-goal--neon .live-goal-title {
+      color: #c8ffff;
+      text-shadow: 0 0 8px rgba(37, 244, 238, 0.5);
+    }
+    .live-goal--neon .live-goal-pct {
+      background: rgba(37, 244, 238, 0.12);
+      color: #25f4ee;
+      border: 1px solid rgba(37, 244, 238, 0.4);
+      text-shadow: 0 0 6px rgba(37, 244, 238, 0.6);
+    }
+    .live-goal--neon .live-goal-count { color: #f0f8ff; }
+    .live-goal--neon .live-goal-count strong {
+      color: #ff6ec7;
+      text-shadow: 0 0 8px rgba(255, 110, 199, 0.5);
+    }
+    .live-goal--neon .live-goal-track {
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(37, 244, 238, 0.25);
+      height: 16px;
+    }
+    .live-goal--neon .live-goal-fill {
+      background: linear-gradient(90deg, #25f4ee, #7b61ff 45%, #ff2d9b);
+      box-shadow:
+        0 0 14px rgba(37, 244, 238, 0.7),
+        0 0 22px rgba(255, 45, 155, 0.45);
+    }
+
+    /* Minimal */
+    .live-goal--minimal {
+      background: rgba(0, 0, 0, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      padding: 12px 14px;
+      backdrop-filter: blur(6px);
+    }
+
+    .live-goal--minimal .live-goal-title {
+      color: #e8e8ee;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .live-goal--minimal .live-goal-pct {
+      background: transparent;
+      color: #ccc;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .live-goal--minimal .live-goal-count {
+      font-size: 19px;
+      color: #f5f5f7;
+    }
+    .live-goal--minimal .live-goal-count strong { color: #fff; }
+    .live-goal--minimal .live-goal-coin { width: 18px; height: 18px; opacity: 0.9; }
+    .live-goal--minimal .live-goal-track {
+      height: 8px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .live-goal--minimal .live-goal-fill {
+      background: #fff;
+      opacity: 0.92;
+    }
+
+    .live-goal--complete .live-goal-fill {
+      animation: goalPulse 1.2s ease infinite;
+    }
+
+    @keyframes goalPulse {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.25); }
+    }
+  </style>
+</head>
+<body>
+  <div id="goalRoot"></div>
+
+  <script src="/js/goal-config.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/overlay-socket.js"></script>
+  <script>
+    const config = readLiveGoalConfigFromUrl();
+    const isPreview = new URLSearchParams(window.location.search).get('preview') === '1';
+    const root = document.getElementById('goalRoot');
+    let currentTotal = 0;
+
+    function renderGoal() {
+      root.innerHTML = buildGoalWidgetMarkup(currentTotal, config.target, config.styleId);
+      const widget = root.querySelector('.live-goal');
+      if (widget && computeGoalPercent(currentTotal, config.target) >= 100) {
+        widget.classList.add('live-goal--complete');
+      }
+    }
+
+    function setTotal(total) {
+      currentTotal = Math.max(0, Math.floor(Number(total) || 0));
+      renderGoal();
+    }
+
+    if (isPreview) {
+      let mock = Math.floor(config.target * 0.15);
+      setTotal(mock);
+      setInterval(() => {
+        mock += Math.floor(config.target * 0.04) + Math.floor(Math.random() * Math.max(3, config.target * 0.02));
+        if (mock >= config.target * 0.95) mock = Math.floor(config.target * 0.12);
+        setTotal(mock);
+      }, 2200);
+    } else {
+      renderGoal();
+      const socket = createOverlaySocket();
+      socket.on('gift', (data) => {
+        if (typeof data?.total === 'number') setTotal(data.total);
+      });
+    }
+  </script>
+</body>
+</html>

@@ -14,12 +14,18 @@
     }
     .heart {
       position: absolute;
-      font-size: 26px;
       pointer-events: none;
       user-select: none;
       animation: floatUp 2.8s ease forwards;
       will-change: transform, opacity;
       z-index: 10;
+    }
+    .heart img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.28));
     }
     .avatar-heart {
       position: absolute;
@@ -41,16 +47,21 @@
   </style>
 </head>
 <body>
+  <script src="/js/hearts-config.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/overlay-socket.js"></script>
   <script>
     const socket = createOverlaySocket();
-    const colors = ['#ff69b4', '#ff1493', '#c71585', '#da70d6', '#ba55d3', '#ff00ff'];
+    const { heartId, sizeId, spreadId } = readLikeHeartsConfigFromUrl();
+    const heartImage = getHeartImageOption(heartId).image;
+    const heartSizePx = getHeartSizePx(sizeId);
 
-    const MAX_HEARTS = 18;
-    const HIGH_LOAD_THRESHOLD = 10;
+    const MAX_HEARTS = 30;
+    const HIGH_LOAD_THRESHOLD = 14;
     const LIKE_INTERVAL_MS = 200;
     const MAX_QUEUE = 8;
+    const HEART_BURST_MIN = 2;
+    const HEART_BURST_MAX = 4;
 
     let activeCount = 0;
     const likeQueue = [];
@@ -61,19 +72,20 @@
 
       const heart = document.createElement('div');
       const duration = avatarUrl ? 3000 : 2800;
-      const leftPos = 5 + Math.random() * 27;
+      const pos = randomHeartPosition(spreadId);
 
       if (avatarUrl) {
         heart.className = 'avatar-heart';
-        heart.style.left = leftPos + '%';
-        heart.style.bottom = '25px';
+        heart.style.left = pos.left + '%';
+        heart.style.bottom = Math.max(pos.bottom, 22) + 'px';
         heart.innerHTML = `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.remove()">`;
       } else {
         heart.className = 'heart';
-        heart.style.left = leftPos + '%';
-        heart.style.bottom = '20px';
-        heart.style.color = colors[Math.floor(Math.random() * colors.length)];
-        heart.innerHTML = '❤️';
+        heart.style.left = pos.left + '%';
+        heart.style.bottom = pos.bottom + 'px';
+        heart.style.width = heartSizePx + 'px';
+        heart.style.height = heartSizePx + 'px';
+        heart.innerHTML = `<img src="${heartImage}" alt="heart">`;
       }
 
       heart.style.animationDuration = duration + 'ms';
@@ -88,12 +100,23 @@
       return true;
     }
 
+    function getHeartBurstCount() {
+      if (activeCount >= HIGH_LOAD_THRESHOLD) return HEART_BURST_MIN;
+      return HEART_BURST_MIN + Math.floor(Math.random() * (HEART_BURST_MAX - HEART_BURST_MIN + 1));
+    }
+
     function spawnLike(data) {
       const busy = activeCount >= HIGH_LOAD_THRESHOLD;
-      if (!createHeart()) return;
+      const burstCount = getHeartBurstCount();
+
+      for (let i = 0; i < burstCount; i++) {
+        setTimeout(() => {
+          createHeart();
+        }, i * (55 + Math.floor(Math.random() * 35)));
+      }
 
       if (data.avatar && !busy && activeCount < MAX_HEARTS) {
-        setTimeout(() => createHeart(data.avatar), 150);
+        setTimeout(() => createHeart(data.avatar), 120 + burstCount * 70);
       }
     }
 

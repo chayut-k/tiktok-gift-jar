@@ -54,6 +54,7 @@ function resolveAppUrl() {
 }
 
 const APP_URL = resolveAppUrl();
+const ADMIN_EMAIL = 'evermansy@gmail.com';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const SESSION_SECRET = process.env.SESSION_SECRET || (isProd ? null : 'dev-only-secret-change-me');
@@ -1122,6 +1123,57 @@ function getSessionEmail(req) {
   return sanitizeEmail(req.session?.user?.email);
 }
 
+function isAdminEmail(email) {
+  return sanitizeEmail(email) === ADMIN_EMAIL;
+}
+
+function requireAdmin(req, res, next) {
+  const email = getSessionEmail(req);
+  if (!email || !isAdminEmail(email)) {
+    return res.status(403).json({ success: false, error: 'ไม่มีสิทธิ์เข้าถึง' });
+  }
+  next();
+}
+
+function ensureUserRecord(email) {
+  if (!users[email]) users[email] = {};
+  return users[email];
+}
+
+function recordUserLogin(email, profile = {}) {
+  const cleaned = sanitizeEmail(email);
+  if (!cleaned) return;
+  const record = ensureUserRecord(cleaned);
+  const now = new Date().toISOString();
+  record.loginCount = (record.loginCount || 0) + 1;
+  record.lastLoginAt = now;
+  if (!record.firstLoginAt) record.firstLoginAt = now;
+  if (profile.name) record.name = String(profile.name).slice(0, 120);
+  saveUsers();
+}
+
+function getUserLiveStatus(email) {
+  const stream = userStreams.get(email);
+  const saved = users[email] || {};
+  return {
+    isActive: isDashboardPresent(stream),
+    isConnected: !!stream?.connection,
+    waitingForLive: !!stream?.waitingForLive,
+    dashboardTabs: stream?.dashboardSockets?.size || 0,
+    tiktokUsername: stream?.tiktokUsername || saved.tiktokUsername || null,
+  };
+}
+
+function listRegisteredUserEntries() {
+  return Object.entries(users)
+    .map(([key, data]) => {
+      const email = sanitizeEmail(key);
+      if (!email) return null;
+      return { email, data: data && typeof data === 'object' ? data : {} };
+    })
+    .filter(Boolean);
+}
+
 function mapTikTokError(err) {
   const msg = err?.message || '';
   if (msg.includes('Dashboard') || msg.includes('dashboard')) {
@@ -1217,6 +1269,8 @@ async function buildGoogleUserResponse(payload) {
     userData.tiktokUsername = stream.tiktokUsername;
   }
 
+  userData.isAdmin = isAdminEmail(email);
+
   return userData;
 }
 
@@ -1275,6 +1329,7 @@ app.post('/google-login', async (req, res) => {
       return res.status(401).json({ success: false, error: 'Google login ไม่ถูกต้อง' });
     }
 
+    recordUserLogin(payload.email, payload);
     const userData = await buildGoogleUserResponse(payload);
     saveSessionUser(req, userData);
     req.session.save((saveErr) => {
@@ -1378,6 +1433,48 @@ app.post('/disconnect-tiktok', actionLimiter, (req, res) => {
 
   disconnectUserStream(email, 'manual');
   res.json({ success: true });
+});
+
+app.get('/api/admin/overview', requireAdmin, (req, res) => {
+  const rows = [];
+  let activeNow = 0;
+  let connectedNow = 0;
+
+  listRegisteredUserEntries().forEach(({ email, data }) => {
+    const live = getUserLiveStatus(email);
+    if (live.isActive) activeNow += 1;
+    if (live.isConnected) connectedNow += 1;
+
+    rows.push({
+      email,
+      name: data.name || email.split('@')[0],
+      tiktokUsername: live.tiktokUsername,
+      lastLoginAt: data.lastLoginAt || null,
+      firstLoginAt: data.firstLoginAt || null,
+      loginCount: data.loginCount || 0,
+      isActive: live.isActive,
+      isConnected: live.isConnected,
+      waitingForLive: live.waitingForLive,
+      dashboardTabs: live.dashboardTabs,
+    });
+  });
+
+  rows.sort((a, b) => {
+    const ta = a.lastLoginAt ? Date.parse(a.lastLoginAt) : 0;
+    const tb = b.lastLoginAt ? Date.parse(b.lastLoginAt) : 0;
+    return tb - ta;
+  });
+
+  res.json({
+    success: true,
+    generatedAt: new Date().toISOString(),
+    stats: {
+      totalUsers: rows.length,
+      activeNow,
+      connectedNow,
+    },
+    users: rows,
+  });
 });
 
 app.get('/api/status', (req, res) => {
