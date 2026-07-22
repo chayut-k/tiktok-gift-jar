@@ -865,10 +865,13 @@ function attachTikTokListeners(conn, email, connectionId) {
         diamonds, giftType, repeatEnd, giftPictureUrl, giftName,
       } = gift;
 
+      const senderAvatar = gift.user.avatar || '';
+
       // giftType 1 = streak (Rose ฯลฯ) แสดงทีละชิ้นระหว่าง combo | จบ combo อัปเดตยอดอย่างเดียว ไม่สร้างของซ้ำ
       if (giftType === 1 && !repeatEnd) {
         emitToStream(stream.tiktokUsername, 'gift', {
           user: userLabel,
+          avatar: senderAvatar,
           giftName,
           diamonds,
           repeatCount: 1,
@@ -897,6 +900,7 @@ function attachTikTokListeners(conn, email, connectionId) {
 
         emitToStream(stream.tiktokUsername, 'gift', {
           user: userLabel,
+          avatar: senderAvatar,
           giftName,
           diamonds,
           repeatCount: 0,
@@ -925,6 +929,7 @@ function attachTikTokListeners(conn, email, connectionId) {
 
       emitToStream(stream.tiktokUsername, 'gift', {
         user: userLabel,
+        avatar: senderAvatar,
         giftName,
         diamonds,
         repeatCount,

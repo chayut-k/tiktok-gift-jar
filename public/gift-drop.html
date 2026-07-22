@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <link rel="icon" href="/images/icon.jpg" type="image/jpeg">
   <title>Gift Drop</title>
-  <script src="/js/jar-config.js?v=1.0.16"></script>
-  <script src="/js/gift-size.js?v=1.0.16"></script>
-  <script src="/js/gift-drop-config.js?v=1.0.16"></script>
+  <script src="/js/jar-config.js?v=1.0.17"></script>
+  <script src="/js/gift-size.js?v=1.0.17"></script>
+  <script src="/js/gift-drop-config.js?v=1.0.17"></script>
   <style>
     * { box-sizing: border-box; }
     html, body {
@@ -93,23 +93,58 @@
       font-size: 13px;
       margin-top: 6px;
     }
-    .helicopter {
+    .heli-wrap {
       position: absolute;
-      width: 86px;
-      height: auto;
-      top: 38px;
-      left: -140px;
+      width: 132px;
+      height: 86px;
+      top: 22px;
+      left: -160px;
       z-index: 6;
       pointer-events: none;
       display: none;
       filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
       will-change: left;
     }
+    .heli-wrap .heli-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .heli-wrap .heli-avatar {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: 30px;
+      height: 30px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2.5px solid #fff;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+      background: #333;
+      z-index: 1;
+    }
+    .heli-wrap .heli-avatar.is-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      color: #fff;
+      background: linear-gradient(145deg, #ff2d55, #ff8a00);
+    }
   </style>
 </head>
 <body>
   <div class="stage" id="stage">
-    <img class="helicopter" id="helicopter" src="/images/helicopter.png" alt="">
+    <div class="heli-wrap" id="helicopter">
+      <img class="heli-img" src="/images/helicopter.png" alt="">
+      <img class="heli-avatar" id="heli-avatar" src="" alt="" hidden>
+      <div class="heli-avatar is-placeholder" id="heli-avatar-placeholder" hidden>👤</div>
+    </div>
     <img class="jar-img" id="jar-img" src="/images/jar1.png" alt="โถแก้ว">
     <div class="physics-layer" id="physics-layer"></div>
     <div class="coin-counter" id="coin-counter">
@@ -124,7 +159,7 @@
 
   <script src="/js/matter.min.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-  <script src="/js/overlay-socket.js?v=1.0.16"></script>
+  <script src="/js/overlay-socket.js?v=1.0.17"></script>
   <script>
     const params = new URLSearchParams(window.location.search);
     const isPreview = params.get('preview') === '1';
@@ -168,15 +203,34 @@
     let giftCount = 0;
     let heliBusy = false;
     const giftDeliveryQueue = [];
+    /** Buffer combo/streak gifts into one helicopter trip */
+    let coalesceBuffer = [];
+    let coalesceTimer = null;
+    const COALESCE_MS = 480;
+    const DROP_STAGGER_MS = 70;
+    const MAX_DROPS_PER_TRIP = 12;
     const heliEl = document.getElementById('helicopter');
+    const heliAvatarEl = document.getElementById('heli-avatar');
+    const heliAvatarPlaceholderEl = document.getElementById('heli-avatar-placeholder');
+    // Mock avatar for preview / when sender has no profile picture
+    const MOCK_SENDER_AVATAR = 'data:image/svg+xml,' + encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
+      + '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+      + '<stop offset="0%" stop-color="#ff2d55"/><stop offset="100%" stop-color="#ff8a00"/>'
+      + '</linearGradient></defs>'
+      + '<circle cx="32" cy="32" r="32" fill="url(#g)"/>'
+      + '<circle cx="32" cy="26" r="12" fill="#fff" opacity="0.95"/>'
+      + '<ellipse cx="32" cy="54" rx="18" ry="14" fill="#fff" opacity="0.95"/>'
+      + '</svg>'
+    );
     const HELI_LAYOUT = {
-      width: 86,
-      y: 38,
-      enterFrom: -140,
-      exitTo: STAGE_W + 140,
-      centerX: STAGE_CENTER_X - 43,
+      width: 132,
+      y: 22,
+      enterFrom: -160,
+      exitTo: STAGE_W + 160,
+      centerX: STAGE_CENTER_X - 66,
       baseEnterMs: 1350,
-      baseHoverMs: 320,
+      baseHoverMs: 280,
       baseExitMs: 1250,
     };
     const imageCache = new Map();
@@ -905,13 +959,64 @@
         return Math.max(180, Math.round(baseMs / HELI_SPEED_MULT));
       }
 
-      function runHelicopterDrop(data, onDone) {
+      function sanitizeAvatarUrl(url) {
+        const trimmed = String(url || '').trim();
+        if (!trimmed) return '';
+        if (trimmed.startsWith('/')) return trimmed;
+        if (/^https?:\/\//i.test(trimmed)) return trimmed;
+        if (trimmed.startsWith('data:image/')) return trimmed;
+        return '';
+      }
+
+      function setHelicopterAvatar(avatarUrl) {
+        if (!heliAvatarEl || !heliAvatarPlaceholderEl) return;
+        let url = sanitizeAvatarUrl(avatarUrl);
+        if (!url) url = MOCK_SENDER_AVATAR;
+
+        heliAvatarEl.onload = null;
+        heliAvatarEl.onerror = null;
+        heliAvatarPlaceholderEl.hidden = true;
+        heliAvatarEl.hidden = false;
+        heliAvatarEl.onerror = () => {
+          // fallback mockup if remote avatar fails
+          if (heliAvatarEl.src !== MOCK_SENDER_AVATAR) {
+            heliAvatarEl.src = MOCK_SENDER_AVATAR;
+            return;
+          }
+          heliAvatarEl.hidden = true;
+          heliAvatarEl.removeAttribute('src');
+          heliAvatarPlaceholderEl.hidden = false;
+        };
+        heliAvatarEl.src = url;
+      }
+
+      function pickBatchAvatar(batch) {
+        for (let i = 0; i < batch.length; i++) {
+          const url = sanitizeAvatarUrl(batch[i]?.avatar);
+          if (url) return url;
+        }
+        // no real avatar → mockup (dashboard preview + missing profile pic)
+        return MOCK_SENDER_AVATAR;
+      }
+
+      function dropGiftBatch(drops) {
+        const list = Array.isArray(drops) ? drops : [drops];
+        list.forEach((data, i) => {
+          setTimeout(() => createGift(data), i * DROP_STAGGER_MS);
+        });
+        return Math.max(0, (list.length - 1) * DROP_STAGGER_MS);
+      }
+
+      function runHelicopterDrop(drops, onDone) {
+        const batch = Array.isArray(drops) && drops.length ? drops : [drops];
+
         if (!heliEl) {
-          createGift(data);
+          dropGiftBatch(batch);
           onDone();
           return;
         }
 
+        setHelicopterAvatar(pickBatchAvatar(batch));
         heliEl.style.display = 'block';
         heliEl.style.transition = 'none';
         heliEl.style.left = `${HELI_LAYOUT.enterFrom}px`;
@@ -923,31 +1028,62 @@
         });
 
         setTimeout(() => {
-          createGift(data);
+          const dropMs = dropGiftBatch(batch);
+          const holdMs = heliDuration(HELI_LAYOUT.baseHoverMs) + dropMs;
           setTimeout(() => {
             heliEl.style.transition = `left ${heliDuration(HELI_LAYOUT.baseExitMs)}ms ease-in-out`;
             heliEl.style.left = `${HELI_LAYOUT.exitTo}px`;
             setTimeout(() => {
               heliEl.style.display = 'none';
+              setHelicopterAvatar('');
               onDone();
             }, heliDuration(HELI_LAYOUT.baseExitMs));
-          }, heliDuration(HELI_LAYOUT.baseHoverMs));
+          }, holdMs);
         }, heliDuration(HELI_LAYOUT.baseEnterMs));
       }
 
       function drainGiftDeliveryQueue() {
         if (heliBusy || !giftDeliveryQueue.length) return;
         heliBusy = true;
-        const data = giftDeliveryQueue.shift();
-        runHelicopterDrop(data, () => {
+        const trip = giftDeliveryQueue.shift();
+        const drops = trip?.drops || [];
+        runHelicopterDrop(drops, () => {
           heliBusy = false;
           drainGiftDeliveryQueue();
         });
       }
 
-      function deliverGift(data) {
-        giftDeliveryQueue.push(data);
+      function flushCoalesceBuffer() {
+        coalesceTimer = null;
+        if (!coalesceBuffer.length) return;
+        // One trip per chunk (max MAX_DROPS_PER_TRIP gifts dropped together mid-hover)
+        while (coalesceBuffer.length) {
+          giftDeliveryQueue.push({
+            drops: coalesceBuffer.splice(0, MAX_DROPS_PER_TRIP),
+          });
+        }
         drainGiftDeliveryQueue();
+      }
+
+      /**
+       * Queue gifts for helicopter delivery.
+       * Combo/streak events within COALESCE_MS merge into one flight that drops all at once.
+       */
+      function deliverGiftBatch(data, count = 1) {
+        const n = Math.min(MAX_DROPS_PER_TRIP, Math.max(1, Number(count) || 1));
+        for (let i = 0; i < n; i++) {
+          coalesceBuffer.push(data);
+        }
+        // Cap buffer so extreme spam doesn't grow forever
+        if (coalesceBuffer.length > MAX_DROPS_PER_TRIP * 3) {
+          coalesceBuffer.splice(0, coalesceBuffer.length - MAX_DROPS_PER_TRIP * 3);
+        }
+        clearTimeout(coalesceTimer);
+        coalesceTimer = setTimeout(flushCoalesceBuffer, COALESCE_MS);
+      }
+
+      function deliverGift(data) {
+        deliverGiftBatch(data, 1);
       }
 
       function removeEscapedGifts() {
@@ -1455,18 +1591,20 @@
           const repeatCount = Number(data.repeatCount) || 0;
           if (repeatCount <= 0) return;
 
+          // One batch per gift event (combo count dropped in a single heli trip)
           const count = Math.min(repeatCount, 5);
-          for (let i = 0; i < count; i++) {
-            setTimeout(() => deliverGift(data), i * 120);
-          }
+          deliverGiftBatch(data, count);
         });
       }
 
       function spawnTestGift(diamonds) {
-        deliverGift({
+        deliverGiftBatch({
           giftPictureUrl: FALLBACK_TEXTURE,
-          diamonds
-        });
+          diamonds,
+          user: 'ผู้ชมตัวอย่าง',
+          // empty → mockup avatar on helicopter (dashboard preview)
+          avatar: '',
+        }, 1);
       }
 
       document.addEventListener('keydown', (e) => {
