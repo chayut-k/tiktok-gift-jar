@@ -61,6 +61,53 @@ const ADMIN_EMAIL = 'evermansy@gmail.com';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const SESSION_SECRET = process.env.SESSION_SECRET || (isProd ? null : 'dev-only-secret-change-me');
+const CREDENTIAL_ENCRYPTION_SECRET = process.env.CREDENTIAL_ENCRYPTION_KEY || SESSION_SECRET;
+const ENCRYPTED_SECRET_PREFIX = 'enc:v1';
+
+function getCredentialEncryptionKey() {
+  return crypto.createHash('sha256').update(String(CREDENTIAL_ENCRYPTION_SECRET)).digest();
+}
+
+function encryptStoredSecret(value) {
+  const plaintext = String(value || '').trim();
+  if (!plaintext) return '';
+  if (plaintext.startsWith(`${ENCRYPTED_SECRET_PREFIX}:`)) return plaintext;
+
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getCredentialEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [
+    ENCRYPTED_SECRET_PREFIX,
+    iv.toString('base64url'),
+    tag.toString('base64url'),
+    encrypted.toString('base64url'),
+  ].join(':');
+}
+
+function decryptStoredSecret(value) {
+  const stored = String(value || '').trim();
+  if (!stored) return null;
+  if (!stored.startsWith(`${ENCRYPTED_SECRET_PREFIX}:`)) return stored;
+
+  try {
+    const parts = stored.split(':');
+    if (parts.length !== 5 || `${parts[0]}:${parts[1]}` !== ENCRYPTED_SECRET_PREFIX) return null;
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      getCredentialEncryptionKey(),
+      Buffer.from(parts[2], 'base64url'),
+    );
+    decipher.setAuthTag(Buffer.from(parts[3], 'base64url'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(parts[4], 'base64url')),
+      decipher.final(),
+    ]).toString('utf8');
+  } catch (err) {
+    console.error('Failed to decrypt stored TikTok credential:', err.message);
+    return null;
+  }
+}
 
 function resolveDataDir() {
   if (process.env.DATA_DIR) return process.env.DATA_DIR;
@@ -127,7 +174,7 @@ const io = new Server(httpServer, {
         callback(null, true);
         return;
       }
-      callback(null, true);
+      callback(new Error('Origin not allowed'));
     },
     methods: ['GET', 'POST'],
     credentials: true,
@@ -402,8 +449,8 @@ function emitGiftActivity(stream, gift) {
 function getTikTokCredentials(email) {
   const saved = email ? users[email] || {} : {};
   return {
-    sessionId: saved.sessionId || process.env.TIKTOK_SESSION_ID || null,
-    ttTargetIdc: saved.ttTargetIdc || process.env.TIKTOK_TT_TARGET_IDC || null,
+    sessionId: decryptStoredSecret(saved.sessionId) || process.env.TIKTOK_SESSION_ID || null,
+    ttTargetIdc: decryptStoredSecret(saved.ttTargetIdc) || process.env.TIKTOK_TT_TARGET_IDC || null,
   };
 }
 
@@ -839,12 +886,42 @@ function unregisterDashboardSocket(email, socketId) {
   }
 }
 
-function registerOverlaySocket(socket, username) {
+function matchesOverlayAccessToken(email, token) {
+  const expected = String(users[email]?.overlayAccessToken || '');
+  const supplied = String(token || '');
+  if (
+    !/^[A-Za-z0-9_-]{32,128}$/.test(expected)
+    || !/^[A-Za-z0-9_-]{32,128}$/.test(supplied)
+  ) return false;
+  const expectedBuffer = Buffer.from(expected);
+  const suppliedBuffer = Buffer.from(supplied);
+  if (expectedBuffer.length !== suppliedBuffer.length) return false;
+  return crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
+}
+
+function resolveOverlayOwner(username, token) {
+  const activeOwner = usernameOwners.get(username);
+  if (activeOwner) {
+    return matchesOverlayAccessToken(activeOwner, token) ? activeOwner : null;
+  }
+
+  const match = Object.entries(users).find(([email, record]) => (
+    record?.tiktokUsername === username
+    && matchesOverlayAccessToken(email, token)
+  ));
+  return match?.[0] || null;
+}
+
+function registerOverlaySocket(socket, username, token) {
+  const ownerEmail = resolveOverlayOwner(username, token);
+  if (!ownerEmail) return false;
   socket.data.streamUser = username;
+  socket.data.ownerEmail = ownerEmail;
   socket.data.isOverlay = true;
   socket.join(getStreamRoom(username));
   console.log(`📺 Overlay joined stream:${username} (${socket.id})`);
   syncOverlaySocket(socket, username);
+  return true;
 }
 
 function attachTikTokListeners(conn, email, connectionId) {
@@ -1124,12 +1201,10 @@ function prepareStreamUsername(email, tiktokUsername) {
   const stream = getOrCreateStream(email);
   const previousOwner = usernameOwners.get(tiktokUsername);
   if (previousOwner && previousOwner !== email) {
-    const ownerStream = userStreams.get(previousOwner);
-    if (ownerStream) {
-      stopTikTokConnection(ownerStream);
-      stopWaitForLive(ownerStream);
-      clearUsernameOwner(tiktokUsername, previousOwner);
-    }
+    const error = new Error('TikTok Username นี้กำลังถูกใช้งานโดยบัญชีอื่น');
+    error.code = 'TIKTOK_USERNAME_IN_USE';
+    error.statusCode = 409;
+    throw error;
   }
 
   if (stream.tiktokUsername && stream.tiktokUsername !== tiktokUsername) {
@@ -1152,6 +1227,8 @@ async function connectOrWaitForLive(email, tiktokUsername) {
   saveUsers();
 
   const stream = prepareStreamUsername(email, tiktokUsername);
+  users[email].tiktokUsername = tiktokUsername;
+  saveUsers();
   stopWaitForLive(stream);
   clearReconnectTimer(stream);
 
@@ -1297,11 +1374,46 @@ function saveUsers() {
   fs.renameSync(tmp, USERS_FILE);
 }
 
+function migrateStoredUserData() {
+  let changed = false;
+  Object.values(users).forEach((record) => {
+    if (!record || typeof record !== 'object') return;
+    if (record.tiktokUsername) {
+      const normalizedUsername = sanitizeTikTokUsername(record.tiktokUsername);
+      if (normalizedUsername && normalizedUsername !== record.tiktokUsername) {
+        record.tiktokUsername = normalizedUsername;
+        changed = true;
+      }
+    }
+    ['sessionId', 'ttTargetIdc'].forEach((field) => {
+      const value = String(record[field] || '').trim();
+      if (!value || value.startsWith(`${ENCRYPTED_SECRET_PREFIX}:`)) return;
+      record[field] = encryptStoredSecret(value);
+      changed = true;
+    });
+  });
+  if (changed) {
+    saveUsers();
+    console.log('🔐 Migrated stored user data to the secure format');
+  }
+}
+
+function ensureOverlayAccessToken(email) {
+  const record = ensureUserRecord(email);
+  const existing = String(record.overlayAccessToken || '');
+  if (/^[A-Za-z0-9_-]{32,128}$/.test(existing)) return existing;
+  record.overlayAccessToken = crypto.randomBytes(32).toString('base64url');
+  saveUsers();
+  return record.overlayAccessToken;
+}
+
+migrateStoredUserData();
+
 // ================== Helpers ==================
 function sanitizeTikTokUsername(username) {
   const cleaned = String(username || '').trim().replace(/^@/, '');
   if (!/^[a-zA-Z0-9._]{1,50}$/.test(cleaned)) return null;
-  return cleaned;
+  return cleaned.toLowerCase();
 }
 
 function sanitizeEmail(email) {
@@ -1367,6 +1479,9 @@ function listRegisteredUserEntries() {
 
 function mapTikTokError(err) {
   const msg = err?.message || '';
+  if (err?.code === 'TIKTOK_USERNAME_IN_USE') {
+    return 'TikTok Username นี้กำลังถูกใช้งานโดยบัญชีอื่น';
+  }
   if (msg.includes('Dashboard') || msg.includes('dashboard')) {
     return msg;
   }
@@ -1449,10 +1564,15 @@ async function buildGoogleUserResponse(payload) {
 
   if (users[email]) {
     if (users[email].tiktokUsername) userData.tiktokUsername = users[email].tiktokUsername;
-    if (users[email].sessionId) userData.sessionId = users[email].sessionId;
-    if (users[email].ttTargetIdc) userData.ttTargetIdc = users[email].ttTargetIdc;
     if (users[email].selectedJar) userData.selectedJar = users[email].selectedJar;
   }
+  userData.hasTikTokCredentials = !!(
+    users[email]?.sessionId
+    || users[email]?.ttTargetIdc
+    || process.env.TIKTOK_SESSION_ID
+    || process.env.TIKTOK_TT_TARGET_IDC
+  );
+  userData.overlayAccessToken = ensureOverlayAccessToken(email);
 
   const stream = userStreams.get(email);
   if (stream?.tiktokUsername) {
@@ -1539,10 +1659,10 @@ app.post('/google-login', async (req, res) => {
 function saveTikTokUserCredentials(email, body) {
   if (!users[email]) users[email] = {};
   if (body?.sessionId) {
-    users[email].sessionId = String(body.sessionId).trim().slice(0, 200);
+    users[email].sessionId = encryptStoredSecret(String(body.sessionId).trim().slice(0, 200));
   }
   if (body?.ttTargetIdc) {
-    users[email].ttTargetIdc = String(body.ttTargetIdc).trim().slice(0, 64);
+    users[email].ttTargetIdc = encryptStoredSecret(String(body.ttTargetIdc).trim().slice(0, 64));
   }
   saveUsers();
 }
@@ -1558,8 +1678,6 @@ app.post('/connect-tiktok', connectBurstLimiter, connectWindowLimiter, async (re
 
     touchDashboardHttpPresence(email);
 
-    if (!users[email]) users[email] = {};
-    users[email].tiktokUsername = tiktokUsername;
     saveTikTokUserCredentials(email, req.body);
 
     const result = await connectOrWaitForLive(email, tiktokUsername);
@@ -1571,7 +1689,7 @@ app.post('/connect-tiktok', connectBurstLimiter, connectWindowLimiter, async (re
     });
   } catch (err) {
     console.error('Connect error:', err);
-    res.status(500).json({ error: mapTikTokError(err) });
+    res.status(err.statusCode || 500).json({ error: mapTikTokError(err) });
   }
 });
 
@@ -1585,8 +1703,6 @@ app.post('/save-tiktok', connectBurstLimiter, connectWindowLimiter, async (req, 
 
     touchDashboardHttpPresence(email);
 
-    if (!users[email]) users[email] = {};
-    users[email].tiktokUsername = tiktokUsername;
     saveTikTokUserCredentials(email, req.body);
 
     const result = await connectOrWaitForLive(email, tiktokUsername);
@@ -1598,7 +1714,7 @@ app.post('/save-tiktok', connectBurstLimiter, connectWindowLimiter, async (req, 
     });
   } catch (err) {
     console.error('/save-tiktok error:', err);
-    res.status(500).json({ error: mapTikTokError(err) });
+    res.status(err.statusCode || 500).json({ error: mapTikTokError(err) });
   }
 });
 
@@ -1717,9 +1833,14 @@ app.use((err, req, res, next) => {
 io.on('connection', (socket) => {
   const sessionEmail = sanitizeEmail(socket.request.session?.user?.email);
   const overlayUser = sanitizeTikTokUsername(socket.handshake.query?.user);
+  const overlayToken = String(socket.handshake.query?.token || '');
 
   if (overlayUser) {
-    registerOverlaySocket(socket, overlayUser);
+    if (!registerOverlaySocket(socket, overlayUser, overlayToken)) {
+      console.log(`⚠️ Overlay ${socket.id} rejected (invalid access token)`);
+      socket.disconnect(false);
+      return;
+    }
   } else if (sessionEmail) {
     registerDashboardSocket(socket, sessionEmail);
   } else {

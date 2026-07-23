@@ -14,10 +14,12 @@ function sanitizeImageUrl(url) {
 }
 
 function createOverlaySocket() {
-  const user = new URLSearchParams(window.location.search).get('user') || '';
+  const params = new URLSearchParams(window.location.search);
+  const user = params.get('user') || '';
+  const token = params.get('token') || '';
   return io({
     path: '/socket.io/',
-    query: { user },
+    query: { user, token },
     transports: ['polling', 'websocket'],
     upgrade: true,
     rememberUpgrade: false,

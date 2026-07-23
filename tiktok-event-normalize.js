@@ -7,6 +7,13 @@ function pickImageUrl(imageModel) {
   return '';
 }
 
+function finiteNumberInRange(value, fallback, min, max, integer = false) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min) return fallback;
+  const bounded = Math.min(number, max);
+  return integer ? Math.floor(bounded) : bounded;
+}
+
 function normalizeTikTokUser(data) {
   if (!data) {
     return { uniqueId: '', nickname: 'user', avatar: '' };
@@ -51,24 +58,37 @@ function normalizeGiftEvent(data) {
   const gift = data.gift || data.giftDetails || {};
   const extended = data.extendedGiftInfo || {};
 
-  const diamonds = Number(
+  const diamonds = finiteNumberInRange(
     data.diamondCount
     || gift.diamondCount
     || extended.diamond_count
     || extended.diamondCount
-    || 0
+    || 0,
+    0,
+    0,
+    1_000_000_000,
   );
 
-  const giftType = Number(
+  const giftType = finiteNumberInRange(
     data.giftType
     ?? gift.giftType
     ?? gift.type
     ?? extended.gift_type
-    ?? 1
+    ?? 1,
+    1,
+    0,
+    100,
+    true,
   );
 
   const repeatEnd = data.repeatEnd === true || data.repeatEnd === 1;
-  const repeatCount = Number(data.repeatCount || data.comboCount || 1) || 1;
+  const repeatCount = finiteNumberInRange(
+    data.repeatCount || data.comboCount || 1,
+    1,
+    1,
+    1_000_000,
+    true,
+  );
 
   const giftPictureUrl = data.giftPictureUrl
     || pickImageUrl(gift.image)
@@ -98,7 +118,13 @@ function normalizeGiftEvent(data) {
 
 function normalizeLikeEvent(data) {
   const user = normalizeTikTokUser(data);
-  const likeCount = Number(data.likeCount || data.count || 1) || 1;
+  const likeCount = finiteNumberInRange(
+    data.likeCount || data.count || 1,
+    1,
+    1,
+    1_000_000,
+    true,
+  );
   return { user, likeCount };
 }
 

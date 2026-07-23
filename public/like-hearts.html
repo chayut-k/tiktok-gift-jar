@@ -78,14 +78,24 @@
         heart.className = 'avatar-heart';
         heart.style.left = pos.left + '%';
         heart.style.bottom = Math.max(pos.bottom, 22) + 'px';
-        heart.innerHTML = `<img src="${avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;" onerror="this.parentNode.remove()">`;
+        const safeAvatarUrl = sanitizeImageUrl(avatarUrl);
+        if (!safeAvatarUrl) return false;
+        const image = document.createElement('img');
+        image.src = safeAvatarUrl;
+        image.alt = '';
+        image.style.cssText = 'width:100%;height:100%;border-radius:50%;object-fit:cover;';
+        image.addEventListener('error', () => heart.remove(), { once: true });
+        heart.appendChild(image);
       } else {
         heart.className = 'heart';
         heart.style.left = pos.left + '%';
         heart.style.bottom = pos.bottom + 'px';
         heart.style.width = heartSizePx + 'px';
         heart.style.height = heartSizePx + 'px';
-        heart.innerHTML = `<img src="${heartImage}" alt="heart">`;
+        const image = document.createElement('img');
+        image.src = heartImage;
+        image.alt = 'heart';
+        heart.appendChild(image);
       }
 
       heart.style.animationDuration = duration + 'ms';

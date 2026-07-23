@@ -2162,11 +2162,19 @@
       if (user.tiktokUsername) {
         document.getElementById('tiktokUsername').value = user.tiktokUsername;
       }
-      if (user.sessionId) {
-        document.getElementById('tiktokSessionId').value = user.sessionId;
+      const sessionInput = document.getElementById('tiktokSessionId');
+      const targetIdcInput = document.getElementById('tiktokTargetIdc');
+      if (sessionInput) {
+        sessionInput.value = '';
+        if (user.hasTikTokCredentials) {
+          sessionInput.placeholder = 'บันทึกอย่างปลอดภัยแล้ว — เว้นว่างเพื่อใช้ค่าเดิม';
+        }
       }
-      if (user.ttTargetIdc) {
-        document.getElementById('tiktokTargetIdc').value = user.ttTargetIdc;
+      if (targetIdcInput) {
+        targetIdcInput.value = '';
+        if (user.hasTikTokCredentials) {
+          targetIdcInput.placeholder = 'บันทึกแล้ว — เว้นว่างเพื่อใช้ค่าเดิม';
+        }
       }
 
       loadSavedJarPreference();
@@ -2518,6 +2526,9 @@
     function buildOverlayUrl(path, username, extraParams = {}) {
       const url = new URL(path, window.location.origin);
       url.searchParams.set('user', username);
+      if (currentUser?.overlayAccessToken) {
+        url.searchParams.set('token', currentUser.overlayAccessToken);
+      }
       url.searchParams.set('v', OVERLAY_ASSET_VERSION);
       Object.entries(extraParams).forEach(([key, value]) => {
         if (value != null && value !== '') url.searchParams.set(key, value);
